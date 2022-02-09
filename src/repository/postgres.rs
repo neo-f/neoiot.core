@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 use std::time::SystemTime;
 
-use crate::entity::{accounts, device_connections, devices, labels, mappings, properties};
 use crate::entity::prelude::*;
+use crate::entity::{accounts, device_connections, devices, labels, mappings, properties};
 use anyhow::Result;
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
@@ -10,96 +10,6 @@ use poem::async_trait;
 use poem::error::NotFoundError;
 use rand_core::OsRng;
 use sea_orm::{prelude::*, QueryOrder, Set};
-
-#[async_trait]
-pub trait Repository: Send + Sync + 'static {
-    async fn create_account(&self, req: &accounts::AccountCreateReq) -> Result<accounts::Model>;
-    async fn get_account(&self, account_id: &str) -> Result<accounts::Model>;
-    async fn get_account_by_email(&self, email: &str) -> Result<accounts::Model>;
-    async fn list_account(
-        &self,
-        page: usize,
-        page_size: usize,
-        id_in: Option<Vec<String>>,
-        q: Option<String>,
-    ) -> Result<(Vec<accounts::Model>, usize)>;
-    async fn update_account(
-        &self,
-        account_id: &str,
-        req: &accounts::AccountUpdateReq,
-    ) -> Result<accounts::Model>;
-    async fn delete_account(&self, account_id: &str) -> Result<()>;
-
-    async fn get_device(&self, account_id: &str, device_id: &str) -> Result<devices::Model>;
-    async fn get_device_with_labels(
-        &self,
-        account_id: &str,
-        device_id: &str,
-    ) -> Result<devices::ModelWithRelated>;
-    async fn list_device(
-        &self,
-        account_id: Option<&str>,
-        page: usize,
-        page_size: usize,
-        id_in: Option<Vec<String>>,
-        labels_in: Option<Vec<String>>,
-        q: Option<String>,
-    ) -> Result<(Vec<devices::Model>, usize)>;
-    async fn update_device(
-        &self,
-        account_id: &str,
-        device_id: &str,
-        req: &devices::DeviceUpdateReq,
-    ) -> Result<devices::ModelWithRelated>;
-    async fn delete_device(&self, account_id: &str, device_id: &str) -> Result<()>;
-    async fn create_device(
-        &self,
-        account_id: &str,
-        req: &devices::DeviceCreateReq,
-    ) -> Result<devices::ModelWithRelated>;
-
-    async fn create_mapping(
-        &self,
-        account_id: &str,
-        mapping: &mappings::MappingCreateReq,
-    ) -> Result<mappings::Model>;
-    async fn get_mapping(&self, account_id: &str, mapping_id: &str) -> Result<mappings::Model>;
-    async fn list_mapping(
-        &self,
-        account_id: &str,
-        page: usize,
-        page_size: usize,
-        id_in: Option<Vec<String>>,
-        q: Option<String>,
-    ) -> Result<(Vec<mappings::Model>, usize)>;
-    async fn update_mapping(
-        &self,
-        account_id: &str,
-        mapping_id: &str,
-        req: &mappings::MappingUpdateReq,
-    ) -> Result<mappings::Model>;
-    async fn delete_mapping(&self, account_id: &str, mapping_id: &str) -> Result<()>;
-    async fn list_device_connections(
-        &self,
-        account_id: &str,
-        device_id: &str,
-        page: usize,
-        page_size: usize,
-    ) -> Result<(Vec<device_connections::Model>, usize)>;
-    async fn create_property(
-        &self,
-        account_id: &str,
-        mapping_id: &str,
-        property: &properties::PropertyCreateReq,
-    ) -> Result<properties::Model>;
-    async fn update_property(
-        &self,
-        account_id: &str,
-        mapping_id: &str,
-        identifier: &str,
-        req: &properties::PropertyUpdateReq,
-    ) -> Result<properties::Model>;
-}
 
 pub struct PostgresRepository {
     pub conn: DatabaseConnection,
@@ -112,7 +22,7 @@ impl PostgresRepository {
 }
 
 #[async_trait]
-impl Repository for PostgresRepository {
+impl super::Repository for PostgresRepository {
     async fn create_account(&self, req: &accounts::AccountCreateReq) -> Result<accounts::Model> {
         let new_account = accounts::ActiveModel {
             id: Set(xid::new().to_string()),
@@ -177,7 +87,7 @@ impl Repository for PostgresRepository {
             obj.name = Set(name.clone());
         }
         if let Some(password) = &req.password {
-            obj.password = Set(hash_password(&password));
+            obj.password = Set(hash_password(password));
         }
         let account = obj.update(&self.conn).await?;
         Ok(account)
@@ -258,8 +168,8 @@ impl Repository for PostgresRepository {
         req: &devices::DeviceUpdateReq,
     ) -> Result<devices::ModelWithRelated> {
         let device_with_labels = self.get_device_with_labels(account_id, device_id).await?;
-        if &device_with_labels.device.account_id != account_id {
-            return Err(NotFoundError)?;
+        if device_with_labels.device.account_id != account_id {
+            return Err(NotFoundError.into());
         }
         let mut device: devices::ActiveModel = device_with_labels.device.into();
         //1. change device tags
@@ -269,7 +179,7 @@ impl Repository for PostgresRepository {
                 .iter()
                 .map(|l| l.name.clone())
                 .collect::<HashSet<_>>();
-            let new_labels = new_labels.into_iter().cloned().collect::<HashSet<_>>();
+            let new_labels = new_labels.iter().cloned().collect::<HashSet<_>>();
             if old_labels != new_labels {
                 Labels::delete_many()
                     .filter(labels::Column::DeviceId.eq(device_id))
@@ -325,7 +235,7 @@ impl Repository for PostgresRepository {
                 .as_millis() as i64),
             is_active: Set(true),
             is_online: Set(false),
-            mqtt_username: Set(format!("{}/{}", &device_id, account_id).to_string()),
+            mqtt_username: Set(format!("{}/{}", &device_id, account_id)),
             mqtt_password: Set(req.mqtt_password.clone()),
             is_super_device: Set(false),
             ..Default::default()
@@ -368,7 +278,7 @@ impl Repository for PostgresRepository {
             .one(&self.conn)
             .await?
             .ok_or(NotFoundError)?;
-        Ok(mapping.into())
+        Ok(mapping)
     }
     async fn list_mapping(
         &self,

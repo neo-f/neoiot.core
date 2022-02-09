@@ -47,7 +47,7 @@ impl APIv1 {
         }
         let claims =
             Claims::create(jwt_simple::prelude::Duration::from_days(1)).with_subject(account.email);
-        let key = HS256Key::from_bytes(&SETTINGS.read().unwrap().secret.as_bytes());
+        let key = HS256Key::from_bytes(SETTINGS.read().unwrap().secret.as_bytes());
         let token = key.authenticate(claims)?;
         Ok(Json(accounts::LoginResp { token }))
     }
@@ -177,6 +177,7 @@ impl APIv1 {
 
     /// 查询设备列表
     #[oai(path = "/device", method = "get", tag = "ApiTags::Device")]
+    #[allow(clippy::too_many_arguments)]
     async fn list_device(
         &self,
         state: Data<&AppState>,

@@ -1,5 +1,5 @@
 mod auth;
-mod service;
+mod http;
 use std::{sync::Arc, time::Duration};
 
 use poem::{listener::TcpListener, middleware, EndpointExt, Route, Server};
@@ -8,10 +8,10 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 
 use crate::{
     config::SETTINGS,
-    repository::repository::{PostgresRepository, Repository},
+    repository::{PostgresRepository, Repository},
 };
 
-use self::service::APIv1;
+use self::http::APIv1;
 
 #[derive(Clone)]
 pub struct AppState {
