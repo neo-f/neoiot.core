@@ -1,7 +1,5 @@
 use super::{auth::JWTAuthorization, AppState};
-use crate::config::SETTINGS;
-use crate::entity::accounts::AccountListResp;
-use crate::entity::{accounts, device_connections, devices, mappings, properties};
+use crate::{config::SETTINGS, io_schema};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use jwt_simple::prelude::*;
 use poem::http::StatusCode;
@@ -21,8 +19,8 @@ enum ApiTags {
     Account,
     /// 设备相关API
     Device,
-    /// 映射集相关API
-    Mapping,
+    /// 数据模型相关API
+    Schema,
 }
 
 const fn default_page() -> usize {
@@ -39,17 +37,21 @@ impl APIv1 {
     async fn obtain_token(
         &self,
         state: Data<&AppState>,
-        data: Json<accounts::Login>,
-    ) -> Result<Json<accounts::LoginResp>> {
-        let account = state.repo.get_account_by_email(&data.email).await?;
+        data: Json<io_schema::Login>,
+    ) -> Result<Json<io_schema::LoginResp>> {
+        let account = state
+            .repo
+            .get_account_by_email(&data.email)
+            .await
+            .map_err(|_| Error::from_string("账号或密码错误", StatusCode::UNAUTHORIZED))?;
         if !verify_password(&data.password, &account.password) {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
         }
         let claims =
-            Claims::create(jwt_simple::prelude::Duration::from_days(1)).with_subject(account.email);
+            Claims::create(jwt_simple::prelude::Duration::from_days(1)).with_subject(account.id);
         let key = HS256Key::from_bytes(SETTINGS.read().unwrap().secret.as_bytes());
         let token = key.authenticate(claims)?;
-        Ok(Json(accounts::LoginResp { token }))
+        Ok(Json(io_schema::LoginResp { token }))
     }
 
     /// 创建账号(需要管理员权限)
@@ -58,8 +60,8 @@ impl APIv1 {
         &self,
         account: JWTAuthorization,
         state: Data<&AppState>,
-        body: Json<accounts::AccountCreateReq>,
-    ) -> Result<Json<accounts::AccountResp>> {
+        body: Json<io_schema::AccountCreateReq>,
+    ) -> Result<Json<io_schema::AccountResp>> {
         let account = state.repo.get_account(&account.0).await?;
         if !account.is_superuser {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
@@ -84,17 +86,17 @@ impl APIv1 {
         page_size: Query<usize>,
         /// 模糊查询账号名称
         q: Query<Option<String>>,
-    ) -> Result<Json<accounts::AccountListResp>> {
+    ) -> Result<Json<io_schema::AccountListResp>> {
         let account = state.repo.get_account(&account.0).await?;
         if !account.is_superuser {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
         }
-        let (accounts, total) = state
+        let (schema, total) = state
             .repo
             .list_account(page.0, page_size.0, id_in.clone(), q.clone())
             .await?;
-        Ok(Json(AccountListResp {
-            results: accounts.into_iter().map(|account| account.into()).collect(),
+        Ok(Json(io_schema::AccountListResp {
+            results: schema.into_iter().map(|account| account.into()).collect(),
             total,
         }))
     }
@@ -111,7 +113,7 @@ impl APIv1 {
         account: JWTAuthorization,
         /// 要获取的账户ID
         account_id: Path<String>,
-    ) -> Result<Json<accounts::AccountResp>> {
+    ) -> Result<Json<io_schema::AccountResp>> {
         let account = state.repo.get_account(&account.0).await?;
         if !account.is_superuser {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
@@ -132,8 +134,8 @@ impl APIv1 {
         state: Data<&AppState>,
         /// 要更新的账户ID
         account_id: Path<String>,
-        body: Json<accounts::AccountUpdateReq>,
-    ) -> Result<Json<accounts::AccountResp>> {
+        body: Json<io_schema::AccountUpdateReq>,
+    ) -> Result<Json<io_schema::AccountResp>> {
         let account = state.repo.get_account(&account.0).await?;
         if !account.is_superuser {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
@@ -169,8 +171,8 @@ impl APIv1 {
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        body: Json<devices::DeviceCreateReq>,
-    ) -> Result<Json<devices::DeviceResp>> {
+        body: Json<io_schema::DeviceCreateReq>,
+    ) -> Result<Json<io_schema::DeviceResp>> {
         let device = state.repo.create_device(&account.0, &body).await?;
         Ok(Json(device.into()))
     }
@@ -194,7 +196,7 @@ impl APIv1 {
         page_size: Query<usize>,
         /// 模糊查询设备名称
         q: Query<Option<String>>,
-    ) -> Result<Json<devices::DeviceListResp>> {
+    ) -> Result<Json<io_schema::DeviceListResp>> {
         let (devices, total) = state
             .repo
             .list_device(
@@ -206,7 +208,7 @@ impl APIv1 {
                 q.clone(),
             )
             .await?;
-        Ok(Json(devices::DeviceListResp {
+        Ok(Json(io_schema::DeviceListResp {
             results: devices.into_iter().map(|device| device.into()).collect(),
             total,
         }))
@@ -219,7 +221,7 @@ impl APIv1 {
         state: Data<&AppState>,
         account: JWTAuthorization,
         device_id: Path<String>,
-    ) -> Result<Json<devices::DeviceResp>> {
+    ) -> Result<Json<io_schema::DeviceResp>> {
         let device = state
             .repo
             .get_device_with_labels(&account.0, &device_id)
@@ -233,8 +235,8 @@ impl APIv1 {
         state: Data<&AppState>,
         account: JWTAuthorization,
         device_id: Path<String>,
-        body: Json<devices::DeviceUpdateReq>,
-    ) -> Result<Json<devices::DeviceResp>> {
+        body: Json<io_schema::DeviceUpdateReq>,
+    ) -> Result<Json<io_schema::DeviceResp>> {
         let device = state
             .repo
             .update_device(&account.0, &device_id, &body)
@@ -275,7 +277,7 @@ impl APIv1 {
         /// 每页条目数
         #[oai(default = "default_page_size")]
         page_size: Query<usize>,
-    ) -> Result<Json<device_connections::DeviceConnectionsListResp>> {
+    ) -> Result<Json<io_schema::DeviceConnectionsListResp>> {
         let result = state
             .repo
             .list_device_connections(&account.0, &device_id, page.0, page_size.0)
@@ -283,21 +285,21 @@ impl APIv1 {
         Ok(Json(result.into()))
     }
 
-    /// 创建映射集
-    #[oai(path = "/mapping", method = "post", tag = "ApiTags::Mapping")]
-    async fn create_mapping(
+    /// 创建数据模型
+    #[oai(path = "/schema", method = "post", tag = "ApiTags::Schema")]
+    async fn create_schema(
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        body: Json<mappings::MappingCreateReq>,
-    ) -> Result<Json<mappings::MappingResp>> {
-        let mapping = state.repo.create_mapping(&account.0, &body).await?;
-        Ok(Json(mapping.into()))
+        body: Json<io_schema::SchemaCreateReq>,
+    ) -> Result<Json<io_schema::SchemaResp>> {
+        let schema = state.repo.create_schema(&account.0, &body).await?;
+        Ok(Json(schema.into()))
     }
 
-    /// 查询映射集列表
-    #[oai(path = "/mapping", method = "get", tag = "ApiTags::Mapping")]
-    async fn list_mapping(
+    /// 查询数据模型列表
+    #[oai(path = "/schema", method = "get", tag = "ApiTags::Schema")]
+    async fn list_schema(
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
@@ -309,110 +311,102 @@ impl APIv1 {
         /// 每页条目数
         #[oai(default = "default_page_size")]
         page_size: Query<usize>,
-        /// 模糊查询映射集名称
+        /// 模糊查询数据模型名称
         q: Query<Option<String>>,
-    ) -> Result<Json<mappings::MappingListResp>> {
-        let (mappings, total) = state
+    ) -> Result<Json<io_schema::SchemaListResp>> {
+        let (schemas, total) = state
             .repo
-            .list_mapping(&account.0, page.0, page_size.0, id_in.clone(), q.clone())
+            .list_schema(&account.0, page.0, page_size.0, id_in.clone(), q.clone())
             .await?;
-        Ok(Json(mappings::MappingListResp {
-            results: mappings.into_iter().map(|mapping| mapping.into()).collect(),
+        Ok(Json(io_schema::SchemaListResp {
+            results: schemas.into_iter().map(|schema| schema.into()).collect(),
             total,
         }))
     }
 
-    /// 查询映射集详情
-    #[oai(
-        path = "/mapping/:mapping_id",
-        method = "get",
-        tag = "ApiTags::Mapping"
-    )]
-    async fn get_mapping(
+    /// 查询数据模型详情
+    #[oai(path = "/schema/:schema_id", method = "get", tag = "ApiTags::Schema")]
+    async fn get_schema(
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        mapping_id: Path<String>,
-    ) -> Result<Json<mappings::MappingResp>> {
-        let mapping = state.repo.get_mapping(&account.0, &mapping_id).await?;
-        Ok(Json(mapping.into()))
+        schema_id: Path<String>,
+    ) -> Result<Json<io_schema::SchemaResp>> {
+        let schema = state.repo.get_schema(&account.0, &schema_id).await?;
+        Ok(Json(schema.into()))
     }
 
-    /// 更新映射集
-    #[oai(
-        path = "/mapping/:mapping_id",
-        method = "patch",
-        tag = "ApiTags::Mapping"
-    )]
-    async fn update_mapping(
+    /// 更新数据模型
+    #[oai(path = "/schema/:schema_id", method = "patch", tag = "ApiTags::Schema")]
+    async fn update_schema(
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        mapping_id: Path<String>,
-        body: Json<mappings::MappingUpdateReq>,
-    ) -> Result<Json<mappings::MappingResp>> {
-        let mapping = state
+        schema_id: Path<String>,
+        body: Json<io_schema::SchemaUpdateReq>,
+    ) -> Result<Json<io_schema::SchemaResp>> {
+        let schema = state
             .repo
-            .update_mapping(&account.0, &mapping_id, &body)
+            .update_schema(&account.0, &schema_id, &body)
             .await?;
-        Ok(Json(mapping.into()))
+        Ok(Json(schema.into()))
     }
 
-    /// 删除映射集
+    /// 删除数据模型
     #[oai(
-        path = "/mapping/:mapping_id",
+        path = "/schema/:schema_id",
         method = "delete",
-        tag = "ApiTags::Mapping"
+        tag = "ApiTags::Schema"
     )]
-    async fn delete_mapping(
+    async fn delete_schema(
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        mapping_id: Path<String>,
+        schema_id: Path<String>,
     ) -> Result<()> {
-        state.repo.delete_mapping(&account.0, &mapping_id).await?;
+        state.repo.delete_schema(&account.0, &schema_id).await?;
         Ok(())
     }
 
-    /// 映射集添加属性
+    /// 数据模型添加属性
     #[oai(
-        path = "/mapping/:mapping_id/property",
+        path = "/schema/:schema_id/Field",
         method = "post",
-        tag = "ApiTags::Mapping"
+        tag = "ApiTags::Schema"
     )]
-    async fn create_property(
+    async fn create_field(
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        mapping_id: Path<String>,
-        body: Json<properties::PropertyCreateReq>,
-    ) -> Result<Json<properties::PropertyResp>> {
-        let property = state
+        schema_id: Path<String>,
+        body: Json<io_schema::FieldCreateReq>,
+    ) -> Result<Json<io_schema::FieldResp>> {
+        let field = state
             .repo
-            .create_property(&account.0, &mapping_id, &body)
+            .create_field(&account.0, &schema_id, &body)
             .await?;
-        Ok(Json(property.into()))
+        Ok(Json(field.into()))
     }
 
-    /// 映射集更新属性
+    /// 数据模型更新属性
     #[oai(
-        path = "/mapping/:mapping_id/property/:identifier",
+        path = "/schema/:schema_id/Field/:identifier",
         method = "patch",
-        tag = "ApiTags::Mapping"
+        tag = "ApiTags::Schema"
     )]
-    async fn update_property(
+    async fn update_field(
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        mapping_id: Path<String>,
+        schema_id: Path<String>,
         identifier: Path<String>,
-        body: Json<properties::PropertyUpdateReq>,
-    ) -> Result<Json<properties::PropertyResp>> {
-        let property = state
+        body: Json<io_schema::FieldUpdateReq>,
+    ) -> Result<Json<io_schema::FieldResp>> {
+        let field = state
             .repo
-            .update_property(&account.0, &mapping_id, &identifier, &body)
+            .update_field(&account.0, &schema_id, &identifier, &body)
             .await?;
-        Ok(Json(property.into()))
+        Ok(Json(field.into()))
     }
 
     // async fn send_command(

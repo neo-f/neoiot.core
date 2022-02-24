@@ -2,9 +2,9 @@ mod auth;
 mod http;
 use std::{sync::Arc, time::Duration};
 
+use entity::sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use poem::{listener::TcpListener, middleware, EndpointExt, Route, Server};
 use poem_openapi::OpenApiService;
-use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 
 use crate::{
     config::SETTINGS,
@@ -27,13 +27,14 @@ async fn get_db_conn() -> Result<DatabaseConnection, std::io::Error> {
         .idle_timeout(Duration::from_secs(8))
         .sqlx_logging(true);
 
+    println!("{}", url);
     let db = Database::connect(opt).await.unwrap();
     Ok(db)
 }
 
 pub async fn run() {
     let conn = get_db_conn().await.unwrap();
-    let repo = PostgresRepository::new(conn);
+    let repo = PostgresRepository::new(conn).await;
     let state = AppState {
         repo: Arc::new(Box::new(repo)),
     };

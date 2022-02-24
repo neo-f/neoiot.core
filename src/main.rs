@@ -3,8 +3,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
 mod config;
-mod entity;
 mod errors;
+mod io_schema;
 mod repository;
 mod service;
 

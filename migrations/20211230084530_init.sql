@@ -29,36 +29,36 @@ CREATE UNIQUE INDEX "uniq_email" ON "accounts" USING btree ("email" "text_ops" A
 CREATE TRIGGER "on_accounts_update" BEFORE UPDATE ON "accounts" FOR EACH ROW EXECUTE PROCEDURE "trigger_set_timestamp"();
 
 -- ----------------------------
--- Table structure for mappings
+-- Table structure for schemas
 -- ----------------------------
-CREATE TABLE "mappings" (
+CREATE TABLE "schemas" (
   "id" varchar NOT NULL,
   "name" varchar NOT NULL,
   "account_id" varchar NOT NULL,
   "created_at" timestamptz(6) NOT NULL DEFAULT now(),
   "updated_at" timestamptz(6),
-  CONSTRAINT "mappings_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "schemas_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "fk_account_id" FOREIGN KEY ("account_id") REFERENCES "accounts" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
 );
-CREATE TRIGGER "on_mappings_update" BEFORE UPDATE ON "mappings" FOR EACH ROW EXECUTE PROCEDURE "trigger_set_timestamp"();
+CREATE TRIGGER "on_schemas_update" BEFORE UPDATE ON "schemas" FOR EACH ROW EXECUTE PROCEDURE "trigger_set_timestamp"();
 
 -- ----------------------------
--- Table structure for properties
+-- Table structure for fields
 -- ----------------------------
 CREATE TYPE data_type AS ENUM ('string', 'number', 'integer', 'boolean', 'time');
-CREATE TABLE "properties" (
+CREATE TABLE "fields" (
   "id" varchar NOT NULL,
-  "mapping_id" varchar NOT NULL,
+  "schema_id" varchar NOT NULL,
   "identifier" varchar NOT NULL,
   "data_type" data_type NOT NULL,
   "comment" varchar NOT NULL default '',
   "unit" varchar NOT NULL default '',
   "created_at" timestamptz(6) NOT NULL DEFAULT now(),
   "updated_at" timestamptz(6),
-  CONSTRAINT "properties_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "fk_mapping_id" FOREIGN KEY ("mapping_id") REFERENCES "mappings" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
+  CONSTRAINT "fields_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "fk_schema_id" FOREIGN KEY ("schema_id") REFERENCES "schemas" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
 );
-CREATE TRIGGER "on_properties_update" BEFORE UPDATE ON "properties" FOR EACH ROW EXECUTE PROCEDURE "trigger_set_timestamp"();
+CREATE TRIGGER "on_fields_update" BEFORE UPDATE ON "fields" FOR EACH ROW EXECUTE PROCEDURE "trigger_set_timestamp"();
 
 -- ----------------------------
 -- Table structure for devices
@@ -66,7 +66,7 @@ CREATE TRIGGER "on_properties_update" BEFORE UPDATE ON "properties" FOR EACH ROW
 CREATE TABLE "devices" (
   "id" varchar NOT NULL,
   "account_id" varchar NOT NULL,
-  "mapping_id" varchar NOT NULL,
+  "schema_id" varchar NOT NULL,
   "name" varchar NOT NULL,
   "label_version" int8 NOT NULL,
   "is_active" bool NOT NULL DEFAULT true,
@@ -80,7 +80,7 @@ CREATE TABLE "devices" (
   "updated_at" timestamptz(6),
   CONSTRAINT "devices_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "fk_account_id" FOREIGN KEY ("account_id") REFERENCES "accounts" ("id") ON DELETE CASCADE ON UPDATE NO ACTION,
-  CONSTRAINT "fk_mapping_id" FOREIGN KEY ("mapping_id") REFERENCES "mappings" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
+  CONSTRAINT "fk_schema_id" FOREIGN KEY ("schema_id") REFERENCES "schemas" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
 );
 CREATE INDEX "idx_acl_pubs" ON "devices" USING gin ("acl_pubs");
 CREATE INDEX "idx_acl_subs" ON "devices" USING gin ("acl_subs");

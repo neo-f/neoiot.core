@@ -1,35 +1,37 @@
-use crate::entity::{accounts, device_connections, devices, mappings, properties};
 use anyhow::Result;
+use entity::prelude::*;
 use poem::async_trait;
 
 mod postgres;
 pub use postgres::PostgresRepository;
 
+use crate::io_schema;
+
 #[async_trait]
 pub trait Repository: Send + Sync + 'static {
-    async fn create_account(&self, req: &accounts::AccountCreateReq) -> Result<accounts::Model>;
-    async fn get_account(&self, account_id: &str) -> Result<accounts::Model>;
-    async fn get_account_by_email(&self, email: &str) -> Result<accounts::Model>;
+    async fn create_account(&self, req: &io_schema::AccountCreateReq) -> Result<AccountModel>;
+    async fn get_account(&self, account_id: &str) -> Result<AccountModel>;
+    async fn get_account_by_email(&self, email: &str) -> Result<AccountModel>;
     async fn list_account(
         &self,
         page: usize,
         page_size: usize,
         id_in: Option<Vec<String>>,
         q: Option<String>,
-    ) -> Result<(Vec<accounts::Model>, usize)>;
+    ) -> Result<(Vec<AccountModel>, usize)>;
     async fn update_account(
         &self,
         account_id: &str,
-        req: &accounts::AccountUpdateReq,
-    ) -> Result<accounts::Model>;
+        req: &io_schema::AccountUpdateReq,
+    ) -> Result<AccountModel>;
     async fn delete_account(&self, account_id: &str) -> Result<()>;
 
-    async fn get_device(&self, account_id: &str, device_id: &str) -> Result<devices::Model>;
+    async fn get_device(&self, account_id: &str, device_id: &str) -> Result<DeviceModel>;
     async fn get_device_with_labels(
         &self,
         account_id: &str,
         device_id: &str,
-    ) -> Result<devices::ModelWithRelated>;
+    ) -> Result<io_schema::DeviceModelWithRelated>;
     async fn list_device(
         &self,
         account_id: Option<&str>,
@@ -38,59 +40,59 @@ pub trait Repository: Send + Sync + 'static {
         id_in: Option<Vec<String>>,
         labels_in: Option<Vec<String>>,
         q: Option<String>,
-    ) -> Result<(Vec<devices::Model>, usize)>;
+    ) -> Result<(Vec<DeviceModel>, usize)>;
     async fn update_device(
         &self,
         account_id: &str,
         device_id: &str,
-        req: &devices::DeviceUpdateReq,
-    ) -> Result<devices::ModelWithRelated>;
+        req: &io_schema::DeviceUpdateReq,
+    ) -> Result<io_schema::DeviceModelWithRelated>;
     async fn delete_device(&self, account_id: &str, device_id: &str) -> Result<()>;
     async fn create_device(
         &self,
         account_id: &str,
-        req: &devices::DeviceCreateReq,
-    ) -> Result<devices::ModelWithRelated>;
+        req: &io_schema::DeviceCreateReq,
+    ) -> Result<io_schema::DeviceModelWithRelated>;
 
-    async fn create_mapping(
+    async fn create_schema(
         &self,
         account_id: &str,
-        mapping: &mappings::MappingCreateReq,
-    ) -> Result<mappings::Model>;
-    async fn get_mapping(&self, account_id: &str, mapping_id: &str) -> Result<mappings::Model>;
-    async fn list_mapping(
+        schema: &io_schema::SchemaCreateReq,
+    ) -> Result<SchemaModel>;
+    async fn get_schema(&self, account_id: &str, schema_id: &str) -> Result<SchemaModel>;
+    async fn list_schema(
         &self,
         account_id: &str,
         page: usize,
         page_size: usize,
         id_in: Option<Vec<String>>,
         q: Option<String>,
-    ) -> Result<(Vec<mappings::Model>, usize)>;
-    async fn update_mapping(
+    ) -> Result<(Vec<SchemaModel>, usize)>;
+    async fn update_schema(
         &self,
         account_id: &str,
-        mapping_id: &str,
-        req: &mappings::MappingUpdateReq,
-    ) -> Result<mappings::Model>;
-    async fn delete_mapping(&self, account_id: &str, mapping_id: &str) -> Result<()>;
+        schema_id: &str,
+        req: &io_schema::SchemaUpdateReq,
+    ) -> Result<SchemaModel>;
+    async fn delete_schema(&self, account_id: &str, schema_id: &str) -> Result<()>;
     async fn list_device_connections(
         &self,
         account_id: &str,
         device_id: &str,
         page: usize,
         page_size: usize,
-    ) -> Result<(Vec<device_connections::Model>, usize)>;
-    async fn create_property(
+    ) -> Result<(Vec<DeviceConnectionModel>, usize)>;
+    async fn create_field(
         &self,
         account_id: &str,
-        mapping_id: &str,
-        property: &properties::PropertyCreateReq,
-    ) -> Result<properties::Model>;
-    async fn update_property(
+        schema_id: &str,
+        field: &io_schema::FieldCreateReq,
+    ) -> Result<FieldModel>;
+    async fn update_field(
         &self,
         account_id: &str,
-        mapping_id: &str,
+        schema_id: &str,
         identifier: &str,
-        req: &properties::PropertyUpdateReq,
-    ) -> Result<properties::Model>;
+        req: &io_schema::FieldUpdateReq,
+    ) -> Result<FieldModel>;
 }

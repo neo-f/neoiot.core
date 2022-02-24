@@ -3,11 +3,19 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "labels")]
+#[sea_orm(table_name = "device_connections")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
-    pub name: String,
+    pub connected: bool,
+    pub client_id: String,
+    pub node: String,
+    pub keep_alive: String,
+    pub ip_address: String,
+    pub proto_ver: i64,
+    pub connected_at: DateTimeWithTimeZone,
+    pub disconnected_at: DateTimeWithTimeZone,
+    pub disconnected_reason: String,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,
     pub device_id: String,
@@ -32,24 +40,3 @@ impl Related<super::devices::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
-use chrono::{DateTime, Local};
-use poem_openapi::Object;
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct LabelResp {
-    /// 设备ID
-    pub id: String,
-    /// 设备名称
-    pub name: String,
-    /// 设备创建时间
-    pub created_at: DateTime<Local>,
-}
-impl From<Model> for LabelResp {
-    fn from(obj: Model) -> Self {
-        LabelResp {
-            id: obj.id,
-            name: obj.name,
-            created_at: obj.created_at.into(),
-        }
-    }
-}

@@ -1,30 +1,56 @@
 use std::collections::HashSet;
 use std::time::SystemTime;
 
-use crate::entity::prelude::*;
-use crate::entity::{accounts, device_connections, devices, labels, mappings, properties};
 use anyhow::Result;
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
+use entity::prelude::*;
+use entity::sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, PaginatorTrait,
+    QueryFilter, QueryOrder, Set,
+};
+use entity::{accounts, device_connections, devices, fields, labels, schemas};
 use poem::async_trait;
 use poem::error::NotFoundError;
+use poem_openapi::types::{Email, Password};
 use rand_core::OsRng;
-use sea_orm::{prelude::*, QueryOrder, Set};
+
+use crate::io_schema::{
+    AccountCreateReq, AccountUpdateReq, DeviceCreateReq, DeviceModelWithRelated, DeviceUpdateReq,
+    FieldCreateReq, FieldUpdateReq, SchemaCreateReq, SchemaUpdateReq,
+};
+
+use super::Repository;
 
 pub struct PostgresRepository {
     pub conn: DatabaseConnection,
 }
+const ADMIN_EMAIL: &str = "admin@neoiot.com";
+const ADMIN_NAME: &str = "admin";
+const ADMIN_PASSWORD: &str = "123123";
 
 impl PostgresRepository {
-    pub fn new(conn: DatabaseConnection) -> Self {
-        Self { conn }
+    pub async fn new(conn: DatabaseConnection) -> Self {
+        // 初始化管理员账号
+        let repo = Self { conn };
+        let check_admin = repo.get_account_by_email(ADMIN_EMAIL).await;
+        if check_admin.is_err() {
+            let req = AccountCreateReq {
+                email: Email(ADMIN_EMAIL.into()),
+                name: ADMIN_NAME.into(),
+                password: Password(ADMIN_PASSWORD.into()),
+                is_super: true,
+            };
+            repo.create_account(&req).await.unwrap();
+        };
+        repo
     }
 }
 
 #[async_trait]
 impl super::Repository for PostgresRepository {
-    async fn create_account(&self, req: &accounts::AccountCreateReq) -> Result<accounts::Model> {
-        let new_account = accounts::ActiveModel {
+    async fn create_account(&self, req: &AccountCreateReq) -> Result<AccountModel> {
+        let new_account = AccountActiveModel {
             id: Set(xid::new().to_string()),
             email: Set(req.email.to_string()),
             name: Set(req.name.clone()),
@@ -35,15 +61,15 @@ impl super::Repository for PostgresRepository {
         let account = new_account.insert(&self.conn).await?;
         Ok(account)
     }
-    async fn get_account(&self, account_id: &str) -> Result<accounts::Model> {
-        let obj = Accounts::find_by_id(account_id.to_string())
+    async fn get_account(&self, account_id: &str) -> Result<AccountModel> {
+        let obj = AccountEntity::find_by_id(account_id.to_string())
             .one(&self.conn)
             .await?
             .ok_or(NotFoundError)?;
         Ok(obj)
     }
-    async fn get_account_by_email(&self, email: &str) -> Result<accounts::Model> {
-        let obj = Accounts::find()
+    async fn get_account_by_email(&self, email: &str) -> Result<AccountModel> {
+        let obj = AccountEntity::find()
             .filter(accounts::Column::Email.eq(email))
             .one(&self.conn)
             .await?
@@ -57,8 +83,8 @@ impl super::Repository for PostgresRepository {
         page_size: usize,
         id_in: Option<Vec<String>>,
         q: Option<String>,
-    ) -> Result<(Vec<accounts::Model>, usize)> {
-        let mut stmt = Accounts::find();
+    ) -> Result<(Vec<AccountModel>, usize)> {
+        let mut stmt = AccountEntity::find();
         if let Some(q) = q {
             stmt = stmt.filter(accounts::Column::Email.starts_with(&q));
         }
@@ -73,13 +99,9 @@ impl super::Repository for PostgresRepository {
         Ok((objects, total))
     }
 
-    async fn update_account(
-        &self,
-        id: &str,
-        req: &accounts::AccountUpdateReq,
-    ) -> Result<accounts::Model> {
+    async fn update_account(&self, id: &str, req: &AccountUpdateReq) -> Result<AccountModel> {
         let obj = self.get_account(id).await?;
-        let mut obj: accounts::ActiveModel = obj.into();
+        let mut obj: AccountActiveModel = obj.into();
         if let Some(email) = &req.email {
             obj.email = Set(email.to_string());
         }
@@ -98,8 +120,9 @@ impl super::Repository for PostgresRepository {
         account.delete(&self.conn).await?;
         Ok(())
     }
-    async fn get_device(&self, account_id: &str, device_id: &str) -> Result<devices::Model> {
-        let device = Devices::find()
+
+    async fn get_device(&self, account_id: &str, device_id: &str) -> Result<DeviceModel> {
+        let device = DeviceEntity::find()
             .filter(devices::Column::Id.eq(device_id))
             .filter(devices::Column::AccountId.eq(account_id))
             .one(&self.conn)
@@ -112,19 +135,19 @@ impl super::Repository for PostgresRepository {
         &self,
         account_id: &str,
         device_id: &str,
-    ) -> Result<devices::ModelWithRelated> {
-        let (device, mapping) = Devices::find()
-            .find_with_related(Mappings)
+    ) -> Result<DeviceModelWithRelated> {
+        let (device, schema) = DeviceEntity::find()
+            .find_with_related(SchemaEntity)
             .filter(devices::Column::Id.eq(device_id))
             .filter(devices::Column::AccountId.eq(account_id))
             .one(&self.conn)
             .await?
             .ok_or(NotFoundError)?;
-        let labels = device.find_related(Labels).all(&self.conn).await?;
-        Ok(devices::ModelWithRelated {
+        let labels = device.find_related(LabelEntity).all(&self.conn).await?;
+        Ok(DeviceModelWithRelated {
             device,
             labels,
-            mapping: mapping.unwrap(),
+            schema: schema.unwrap(),
         })
     }
 
@@ -136,8 +159,8 @@ impl super::Repository for PostgresRepository {
         id_in: Option<Vec<String>>,
         labels_in: Option<Vec<String>>,
         q: Option<String>,
-    ) -> Result<(Vec<devices::Model>, usize)> {
-        let mut stmt = Devices::find();
+    ) -> Result<(Vec<DeviceModel>, usize)> {
+        let mut stmt = DeviceEntity::find();
         if let Some(id_in) = id_in {
             stmt = stmt.filter(devices::Column::Id.is_in(id_in));
         }
@@ -149,7 +172,7 @@ impl super::Repository for PostgresRepository {
         }
         if let Some(labels) = labels_in {
             stmt = stmt
-                .right_join(Labels)
+                .right_join(LabelEntity)
                 .filter(labels::Column::Name.is_in(labels));
         }
         let stmt = stmt
@@ -165,8 +188,8 @@ impl super::Repository for PostgresRepository {
         &self,
         account_id: &str,
         device_id: &str,
-        req: &devices::DeviceUpdateReq,
-    ) -> Result<devices::ModelWithRelated> {
+        req: &DeviceUpdateReq,
+    ) -> Result<DeviceModelWithRelated> {
         let device_with_labels = self.get_device_with_labels(account_id, device_id).await?;
         if device_with_labels.device.account_id != account_id {
             return Err(NotFoundError.into());
@@ -181,11 +204,11 @@ impl super::Repository for PostgresRepository {
                 .collect::<HashSet<_>>();
             let new_labels = new_labels.iter().cloned().collect::<HashSet<_>>();
             if old_labels != new_labels {
-                Labels::delete_many()
+                LabelEntity::delete_many()
                     .filter(labels::Column::DeviceId.eq(device_id))
                     .exec(&self.conn)
                     .await?;
-                Labels::insert_many(new_labels.into_iter().map(|l| labels::ActiveModel {
+                LabelEntity::insert_many(new_labels.into_iter().map(|l| labels::ActiveModel {
                     id: Set(xid::new().to_string()),
                     device_id: Set(device_id.to_string()),
                     name: Set(l),
@@ -205,8 +228,8 @@ impl super::Repository for PostgresRepository {
         if let Some(is_active) = &req.is_active {
             device.is_active = Set(*is_active);
         }
-        if let Some(mapping_id) = &req.mapping_id {
-            device.mapping_id = Set(mapping_id.clone());
+        if let Some(schema_id) = &req.schema_id {
+            device.schema_id = Set(schema_id.clone());
         }
         device.update(&self.conn).await?;
         self.get_device_with_labels(account_id, device_id).await
@@ -221,13 +244,13 @@ impl super::Repository for PostgresRepository {
     async fn create_device(
         &self,
         account_id: &str,
-        req: &devices::DeviceCreateReq,
-    ) -> Result<devices::ModelWithRelated> {
+        req: &DeviceCreateReq,
+    ) -> Result<DeviceModelWithRelated> {
         let device_id = xid::new().to_string();
         let new_device = devices::ActiveModel {
             id: Set(device_id.clone()),
             account_id: Set(account_id.to_string()),
-            mapping_id: Set(req.mapping_id.clone()),
+            schema_id: Set(req.schema_id.clone()),
             name: Set(req.name.clone()),
             label_version: Set(SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -253,84 +276,86 @@ impl super::Repository for PostgresRepository {
             })
             .collect::<Vec<_>>();
         new_device.insert(&self.conn).await?;
-        Labels::insert_many(new_labels).exec(&self.conn).await?;
+        LabelEntity::insert_many(new_labels)
+            .exec(&self.conn)
+            .await?;
         self.get_device_with_labels(account_id, &device_id).await
     }
 
-    async fn create_mapping(
+    async fn create_schema(
         &self,
         account_id: &str,
-        mapping: &mappings::MappingCreateReq,
-    ) -> Result<mappings::Model> {
-        let new_mapping = mappings::ActiveModel {
+        schema: &SchemaCreateReq,
+    ) -> Result<SchemaModel> {
+        let new_schema = SchemaActiveModel {
             id: Set(xid::new().to_string()),
             account_id: Set(account_id.to_string()),
-            name: Set(mapping.name.clone()),
+            name: Set(schema.name.clone()),
             ..Default::default()
         };
-        let new_mapping = new_mapping.insert(&self.conn).await?;
-        Ok(new_mapping)
+        let new_schema = new_schema.insert(&self.conn).await?;
+        Ok(new_schema)
     }
-    async fn get_mapping(&self, account_id: &str, mapping_id: &str) -> Result<mappings::Model> {
-        let mapping = Mappings::find()
-            .filter(mappings::Column::Id.eq(mapping_id))
-            .filter(mappings::Column::AccountId.eq(account_id))
+    async fn get_schema(&self, account_id: &str, schema_id: &str) -> Result<SchemaModel> {
+        let schema = SchemaEntity::find()
+            .filter(schemas::Column::Id.eq(schema_id))
+            .filter(schemas::Column::AccountId.eq(account_id))
             .one(&self.conn)
             .await?
             .ok_or(NotFoundError)?;
-        Ok(mapping)
+        Ok(schema)
     }
-    async fn list_mapping(
+    async fn list_schema(
         &self,
         account_id: &str,
         page: usize,
         page_size: usize,
         id_in: Option<Vec<String>>,
         q: Option<String>,
-    ) -> Result<(Vec<mappings::Model>, usize)> {
-        let mut stmt = Mappings::find().filter(mappings::Column::AccountId.eq(account_id));
+    ) -> Result<(Vec<SchemaModel>, usize)> {
+        let mut stmt = SchemaEntity::find().filter(schemas::Column::AccountId.eq(account_id));
         if let Some(id_in) = id_in {
-            stmt = stmt.filter(mappings::Column::Id.is_in(id_in));
+            stmt = stmt.filter(schemas::Column::Id.is_in(id_in));
         }
         if let Some(q) = q {
-            stmt = stmt.filter(mappings::Column::Name.starts_with(&q));
+            stmt = stmt.filter(schemas::Column::Name.starts_with(&q));
         }
         let stmt = stmt
-            .order_by_asc(mappings::Column::Id)
+            .order_by_asc(schemas::Column::Id)
             .paginate(&self.conn, page_size);
-        let mappings = stmt.fetch_page(page - 1).await?;
+        let schemas = stmt.fetch_page(page - 1).await?;
         let total = stmt.num_items().await?;
 
-        Ok((mappings, total))
+        Ok((schemas, total))
     }
 
-    async fn update_mapping(
+    async fn update_schema(
         &self,
         account_id: &str,
-        mapping_id: &str,
-        req: &mappings::MappingUpdateReq,
-    ) -> Result<mappings::Model> {
-        let mapping = Mappings::find()
-            .filter(mappings::Column::Id.eq(mapping_id))
-            .filter(mappings::Column::AccountId.eq(account_id))
+        schema_id: &str,
+        req: &SchemaUpdateReq,
+    ) -> Result<SchemaModel> {
+        let schema = SchemaEntity::find()
+            .filter(schemas::Column::Id.eq(schema_id))
+            .filter(schemas::Column::AccountId.eq(account_id))
             .one(&self.conn)
             .await?
             .ok_or(NotFoundError)?;
-        let mut mapping: mappings::ActiveModel = mapping.into();
+        let mut schema: schemas::ActiveModel = schema.into();
         if let Some(name) = &req.name {
-            mapping.name = Set(name.clone());
+            schema.name = Set(name.clone());
         }
-        let mapping = mapping.update(&self.conn).await?;
-        Ok(mapping)
+        let schema = schema.update(&self.conn).await?;
+        Ok(schema)
     }
-    async fn delete_mapping(&self, account_id: &str, mapping_id: &str) -> Result<()> {
-        let mapping = Mappings::find()
-            .filter(mappings::Column::Id.eq(mapping_id))
-            .filter(mappings::Column::AccountId.eq(account_id))
+    async fn delete_schema(&self, account_id: &str, schema_id: &str) -> Result<()> {
+        let schema = SchemaEntity::find()
+            .filter(schemas::Column::Id.eq(schema_id))
+            .filter(schemas::Column::AccountId.eq(account_id))
             .one(&self.conn)
             .await?
             .ok_or(NotFoundError)?;
-        mapping.delete(&self.conn).await?;
+        schema.delete(&self.conn).await?;
         Ok(())
     }
     async fn list_device_connections(
@@ -339,9 +364,9 @@ impl super::Repository for PostgresRepository {
         device_id: &str,
         page: usize,
         page_size: usize,
-    ) -> Result<(Vec<device_connections::Model>, usize)> {
+    ) -> Result<(Vec<DeviceConnectionModel>, usize)> {
         self.get_device(account_id, device_id).await?;
-        let paginator = DeviceConnections::find()
+        let paginator = DeviceConnectionEntity::find()
             .filter(device_connections::Column::DeviceId.eq(device_id))
             .order_by_asc(device_connections::Column::Id)
             .paginate(&self.conn, page_size);
@@ -351,53 +376,53 @@ impl super::Repository for PostgresRepository {
         Ok((connections, total))
     }
 
-    async fn create_property(
+    async fn create_field(
         &self,
         account_id: &str,
-        mapping_id: &str,
-        property: &properties::PropertyCreateReq,
-    ) -> Result<properties::Model> {
-        self.get_mapping(account_id, mapping_id).await?;
-        let new_property = properties::ActiveModel {
+        schema_id: &str,
+        field: &FieldCreateReq,
+    ) -> Result<FieldModel> {
+        self.get_schema(account_id, schema_id).await?;
+        let new_field = FieldActiveModel {
             id: Set(xid::new().to_string()),
-            mapping_id: Set(mapping_id.to_string()),
-            identifier: Set(property.identifier.clone()),
-            data_type: Set(property.data_type.clone()),
+            schema_id: Set(schema_id.to_string()),
+            identifier: Set(field.identifier.clone()),
+            data_type: Set(field.data_type.clone()),
             ..Default::default()
         };
-        let property = new_property.insert(&self.conn).await?;
-        Ok(property)
+        let field = new_field.insert(&self.conn).await?;
+        Ok(field)
     }
-    async fn update_property(
+    async fn update_field(
         &self,
         account_id: &str,
-        mapping_id: &str,
+        schema_id: &str,
         identifier: &str,
-        req: &properties::PropertyUpdateReq,
-    ) -> Result<properties::Model> {
-        let property = Properties::find()
-            .left_join(Mappings)
-            .filter(mappings::Column::AccountId.eq(account_id))
-            .filter(properties::Column::MappingId.eq(mapping_id))
-            .filter(properties::Column::Identifier.eq(identifier))
+        req: &FieldUpdateReq,
+    ) -> Result<FieldModel> {
+        let field = FieldEntity::find()
+            .left_join(SchemaEntity)
+            .filter(schemas::Column::AccountId.eq(account_id))
+            .filter(fields::Column::SchemaId.eq(schema_id))
+            .filter(fields::Column::Identifier.eq(identifier))
             .one(&self.conn)
             .await?
             .ok_or(NotFoundError)?;
-        let mut property: properties::ActiveModel = property.into();
+        let mut field: FieldActiveModel = field.into();
         if let Some(identifier) = &req.identifier {
-            property.identifier = Set(identifier.clone());
+            field.identifier = Set(identifier.clone());
         };
         if let Some(data_type) = &req.data_type {
-            property.data_type = Set(data_type.clone());
+            field.data_type = Set(data_type.clone());
         };
         if let Some(comment) = &req.comment {
-            property.comment = Set(comment.clone());
+            field.comment = Set(comment.clone());
         };
         if let Some(unit) = &req.unit {
-            property.unit = Set(unit.clone());
+            field.unit = Set(unit.clone());
         };
-        let property = property.update(&self.conn).await?;
-        Ok(property)
+        let field = field.update(&self.conn).await?;
+        Ok(field)
     }
 }
 
