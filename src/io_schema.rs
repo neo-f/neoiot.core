@@ -280,7 +280,7 @@ pub struct SchemaWithFields {
     pub name: String,
     /// 数据模型创建时间
     pub created_at: DateTime<Local>,
-    /// 属性
+    /// 字段
     pub fields: Vec<Field>,
 }
 
@@ -319,7 +319,7 @@ pub struct Schemas {
 #[derive(Debug, Object, Clone, PartialEq)]
 pub struct Field {
     pub id: String,
-    /// 属性唯一标识符
+    /// 字段唯一标识符
     pub identifier: String,
     // 所属数据模型ID
     pub schema_id: String,
@@ -329,7 +329,7 @@ pub struct Field {
     pub comment: String,
     // 单位
     pub unit: String,
-    /// 属性创建时间
+    /// 字段创建时间
     pub created_at: DateTime<Local>,
 }
 impl From<FieldModel> for Field {
@@ -348,7 +348,7 @@ impl From<FieldModel> for Field {
 
 #[derive(Debug, Object, Clone, PartialEq)]
 pub struct CreateField {
-    /// 属性唯一标识符
+    /// 字段唯一标识符
     pub identifier: String,
     // 数据类型
     pub data_type: fields::DataType,
@@ -360,7 +360,7 @@ pub struct CreateField {
 
 #[derive(Debug, Object, Clone, PartialEq)]
 pub struct UpdateField {
-    /// 属性唯一标识符
+    /// 字段唯一标识符
     pub identifier: Option<String>,
     // 数据类型
     pub data_type: Option<fields::DataType>,

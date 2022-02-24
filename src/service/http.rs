@@ -369,7 +369,7 @@ impl APIv1 {
         Ok(())
     }
 
-    /// 数据模型添加属性
+    /// 数据模型添加字段
     #[oai(
         path = "/schema/:schema_id/field",
         method = "post",
@@ -389,7 +389,7 @@ impl APIv1 {
         Ok(Json(field.into()))
     }
 
-    /// 数据模型更新属性
+    /// 数据模型更新字段
     #[oai(
         path = "/schema/:schema_id/field/:identifier",
         method = "patch",
