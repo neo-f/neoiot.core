@@ -51,6 +51,7 @@ impl APIv1 {
             Claims::create(jwt_simple::prelude::Duration::from_days(1)).with_subject(account.id);
         let key = HS256Key::from_bytes(SETTINGS.read().unwrap().secret.as_bytes());
         let token = key.authenticate(claims)?;
+        state.repo.after_account_logined(&data.email).await?;
         Ok(Json(io_schema::Token { token }))
     }
 

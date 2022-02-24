@@ -12,6 +12,7 @@ pub trait Repository: Send + Sync + 'static {
     async fn create_account(&self, req: &io_schema::CreateAccount) -> Result<AccountModel>;
     async fn get_account(&self, account_id: &str) -> Result<AccountModel>;
     async fn get_account_by_email(&self, email: &str) -> Result<AccountModel>;
+    async fn after_account_logined(&self, email: &str) -> Result<()>;
     async fn list_account(
         &self,
         page: usize,

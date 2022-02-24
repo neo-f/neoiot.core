@@ -4,6 +4,7 @@ use std::time::SystemTime;
 use anyhow::Result;
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
+use chrono::Local;
 use entity::prelude::*;
 use entity::sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, PaginatorTrait,
@@ -76,6 +77,13 @@ impl super::Repository for PostgresRepository {
             .await?
             .ok_or(NotFoundError)?;
         Ok(obj)
+    }
+    async fn after_account_logined(&self, email: &str) -> Result<()> {
+        let account = self.get_account_by_email(email).await?;
+        let mut account: AccountActiveModel = account.into();
+        account.last_login_at = Set(Some(Local::now().into()));
+        account.update(&self.conn).await?;
+        Ok(())
     }
 
     async fn list_account(
