@@ -37,7 +37,7 @@ impl Related<super::schemas::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-#[derive(EnumIter, DeriveActiveEnum, Clone, Debug, PartialEq, Enum)]
+#[derive(EnumIter, DeriveActiveEnum, Clone, Debug, Eq, PartialEq, Enum)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "data_type")]
 pub enum DataType {
     #[sea_orm(string_value = "string")]

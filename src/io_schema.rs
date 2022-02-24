@@ -5,8 +5,8 @@ use poem_openapi::{
     Object,
 };
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct AccountResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct Account {
     pub id: String,
     /// 账户唯一邮箱
     pub email: Email,
@@ -20,7 +20,7 @@ pub struct AccountResp {
     pub created_at: DateTime<Local>,
 }
 
-impl From<AccountModel> for AccountResp {
+impl From<AccountModel> for Account {
     fn from(obj: AccountModel) -> Self {
         Self {
             id: obj.id,
@@ -33,8 +33,8 @@ impl From<AccountModel> for AccountResp {
     }
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct AccountCreateReq {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct CreateAccount {
     /// 账户唯一邮箱
     pub email: Email,
     /// 账户名称
@@ -46,8 +46,8 @@ pub struct AccountCreateReq {
     pub is_super: bool,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct AccountUpdateReq {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct UpdateAccount {
     /// 账户唯一邮箱
     pub email: Option<Email>,
     /// 账户名称
@@ -56,27 +56,27 @@ pub struct AccountUpdateReq {
     pub password: Option<Password>,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct AccountListResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct Accounts {
     /// 数据列表
-    pub results: Vec<AccountResp>,
+    pub results: Vec<Account>,
     /// 总数
     pub total: usize,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
+#[derive(Debug, Object, Clone, PartialEq)]
 pub struct Login {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct LoginResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct Token {
     pub token: String,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct DeviceConnectionResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct DeviceConnection {
     pub id: String,
     /// 所属设备原因
     pub device_id: String,
@@ -98,7 +98,7 @@ pub struct DeviceConnectionResp {
     /// 断开连接原因
     pub disconnected_reason: String,
 }
-impl From<DeviceConnectionModel> for DeviceConnectionResp {
+impl From<DeviceConnectionModel> for DeviceConnection {
     fn from(model: DeviceConnectionModel) -> Self {
         Self {
             id: model.id,
@@ -116,12 +116,12 @@ impl From<DeviceConnectionModel> for DeviceConnectionResp {
     }
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct DeviceConnectionsListResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct DeviceConnections {
     total: usize,
-    results: Vec<DeviceConnectionResp>,
+    results: Vec<DeviceConnection>,
 }
-impl From<(Vec<DeviceConnectionModel>, usize)> for DeviceConnectionsListResp {
+impl From<(Vec<DeviceConnectionModel>, usize)> for DeviceConnections {
     fn from(tuple: (Vec<DeviceConnectionModel>, usize)) -> Self {
         let (models, total) = tuple;
         Self {
@@ -137,16 +137,16 @@ pub struct DeviceModelWithRelated {
     pub schema: SchemaModel,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct DeviceResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct DeviceWithLables {
     /// 设备ID
     pub id: String,
     /// 设备名称
     pub name: String,
     /// 设备标签列表
-    pub labels: Vec<LabelResp>,
+    pub labels: Vec<Label>,
     /// 数据模型
-    pub schema: SchemaResp,
+    pub schema: Schema,
     /// 设备是否激活
     pub is_active: bool,
     /// 设备是否在线
@@ -155,9 +155,9 @@ pub struct DeviceResp {
     pub created_at: DateTime<Local>,
 }
 
-impl From<DeviceModelWithRelated> for DeviceResp {
+impl From<DeviceModelWithRelated> for DeviceWithLables {
     fn from(obj: DeviceModelWithRelated) -> Self {
-        DeviceResp {
+        DeviceWithLables {
             id: obj.device.id,
             name: obj.device.name,
             labels: obj.labels.into_iter().map(|x| x.into()).collect(),
@@ -169,8 +169,8 @@ impl From<DeviceModelWithRelated> for DeviceResp {
     }
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct DeviceSimpleResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct Device {
     /// 设备ID
     pub id: String,
     /// 设备名称
@@ -184,9 +184,9 @@ pub struct DeviceSimpleResp {
     /// 设备创建时间
     pub created_at: DateTime<Local>,
 }
-impl From<DeviceModel> for DeviceSimpleResp {
+impl From<DeviceModel> for Device {
     fn from(obj: DeviceModel) -> Self {
-        DeviceSimpleResp {
+        Device {
             id: obj.id,
             name: obj.name,
             schema_id: obj.schema_id.to_string(),
@@ -197,8 +197,8 @@ impl From<DeviceModel> for DeviceSimpleResp {
     }
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct DeviceCreateReq {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct CreateDevice {
     /// 设备名称
     pub name: String,
     /// 数据模型ID
@@ -209,8 +209,8 @@ pub struct DeviceCreateReq {
     pub mqtt_password: String,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct DeviceUpdateReq {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct UpdateDevice {
     /// 设备名称
     pub name: Option<String>,
     /// 设备激活状态ID
@@ -221,16 +221,16 @@ pub struct DeviceUpdateReq {
     pub schema_id: Option<String>,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct DeviceListResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct Devices {
     /// 数据列表
-    pub results: Vec<DeviceSimpleResp>,
+    pub results: Vec<Device>,
     /// 总数
     pub total: usize,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct LabelResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct Label {
     /// 设备ID
     pub id: String,
     /// 设备名称
@@ -239,9 +239,9 @@ pub struct LabelResp {
     pub created_at: DateTime<Local>,
 }
 
-impl From<LabelModel> for LabelResp {
+impl From<LabelModel> for Label {
     fn from(obj: LabelModel) -> Self {
-        LabelResp {
+        Label {
             id: obj.id,
             name: obj.name,
             created_at: obj.created_at.into(),
@@ -249,8 +249,8 @@ impl From<LabelModel> for LabelResp {
     }
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct SchemaResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct Schema {
     pub id: String,
     /// 数据模型名称
     pub name: String,
@@ -258,7 +258,7 @@ pub struct SchemaResp {
     pub created_at: DateTime<Local>,
 }
 
-impl From<SchemaModel> for SchemaResp {
+impl From<SchemaModel> for Schema {
     fn from(obj: SchemaModel) -> Self {
         Self {
             id: obj.id,
@@ -270,52 +270,54 @@ impl From<SchemaModel> for SchemaResp {
 
 pub struct SchemaModelWithRelated {
     pub schema: SchemaModel,
-    pub field: Vec<FieldModel>,
+    pub fields: Vec<FieldModel>,
 }
-pub struct SchemaDetailResp {
+
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct SchemaWithFields {
     pub id: String,
     /// 数据模型名称
     pub name: String,
     /// 数据模型创建时间
     pub created_at: DateTime<Local>,
     /// 属性
-    pub field: Vec<FieldResp>,
+    pub fields: Vec<Field>,
 }
 
-impl From<SchemaModelWithRelated> for SchemaDetailResp {
+impl From<SchemaModelWithRelated> for SchemaWithFields {
     fn from(obj: SchemaModelWithRelated) -> Self {
         Self {
             id: obj.schema.id,
             name: obj.schema.name,
             created_at: obj.schema.created_at.into(),
-            field: obj.field.into_iter().map(|x| x.into()).collect(),
+            fields: obj.fields.into_iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct SchemaCreateReq {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct CreateSchema {
     /// 数据模型名称
     #[oai(validator(min_length = 3, max_length = 64))]
     pub name: String,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct SchemaUpdateReq {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct UpdateSchema {
     /// 账户名称
     pub name: Option<String>,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct SchemaListResp {
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct Schemas {
     /// 数据列表
-    pub results: Vec<SchemaResp>,
+    pub results: Vec<Schema>,
     /// 总数
     pub total: usize,
 }
 
 #[derive(Debug, Object, Clone, PartialEq)]
-pub struct FieldResp {
+pub struct Field {
     pub id: String,
     /// 属性唯一标识符
     pub identifier: String,
@@ -330,7 +332,7 @@ pub struct FieldResp {
     /// 属性创建时间
     pub created_at: DateTime<Local>,
 }
-impl From<FieldModel> for FieldResp {
+impl From<FieldModel> for Field {
     fn from(obj: FieldModel) -> Self {
         Self {
             id: obj.id.clone(),
@@ -345,7 +347,7 @@ impl From<FieldModel> for FieldResp {
 }
 
 #[derive(Debug, Object, Clone, PartialEq)]
-pub struct FieldCreateReq {
+pub struct CreateField {
     /// 属性唯一标识符
     pub identifier: String,
     // 数据类型
@@ -357,7 +359,7 @@ pub struct FieldCreateReq {
 }
 
 #[derive(Debug, Object, Clone, PartialEq)]
-pub struct FieldUpdateReq {
+pub struct UpdateField {
     /// 属性唯一标识符
     pub identifier: Option<String>,
     // 数据类型

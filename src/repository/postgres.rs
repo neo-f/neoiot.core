@@ -16,8 +16,8 @@ use poem_openapi::types::{Email, Password};
 use rand_core::OsRng;
 
 use crate::io_schema::{
-    AccountCreateReq, AccountUpdateReq, DeviceCreateReq, DeviceModelWithRelated, DeviceUpdateReq,
-    FieldCreateReq, FieldUpdateReq, SchemaCreateReq, SchemaUpdateReq,
+    CreateAccount, CreateDevice, CreateField, CreateSchema, DeviceModelWithRelated,
+    SchemaModelWithRelated, UpdateAccount, UpdateDevice, UpdateField, UpdateSchema,
 };
 
 use super::Repository;
@@ -30,26 +30,27 @@ const ADMIN_NAME: &str = "admin";
 const ADMIN_PASSWORD: &str = "123123";
 
 impl PostgresRepository {
-    pub async fn new(conn: DatabaseConnection) -> Self {
-        // 初始化管理员账号
-        let repo = Self { conn };
-        let check_admin = repo.get_account_by_email(ADMIN_EMAIL).await;
+    pub fn new(conn: DatabaseConnection) -> Self {
+        Self { conn }
+    }
+    // 初始化管理员账号
+    pub async fn initial_admin(&self) {
+        let check_admin = self.get_account_by_email(ADMIN_EMAIL).await;
         if check_admin.is_err() {
-            let req = AccountCreateReq {
+            let req = CreateAccount {
                 email: Email(ADMIN_EMAIL.into()),
                 name: ADMIN_NAME.into(),
                 password: Password(ADMIN_PASSWORD.into()),
                 is_super: true,
             };
-            repo.create_account(&req).await.unwrap();
+            self.create_account(&req).await.unwrap();
         };
-        repo
     }
 }
 
 #[async_trait]
 impl super::Repository for PostgresRepository {
-    async fn create_account(&self, req: &AccountCreateReq) -> Result<AccountModel> {
+    async fn create_account(&self, req: &CreateAccount) -> Result<AccountModel> {
         let new_account = AccountActiveModel {
             id: Set(xid::new().to_string()),
             email: Set(req.email.to_string()),
@@ -99,7 +100,7 @@ impl super::Repository for PostgresRepository {
         Ok((objects, total))
     }
 
-    async fn update_account(&self, id: &str, req: &AccountUpdateReq) -> Result<AccountModel> {
+    async fn update_account(&self, id: &str, req: &UpdateAccount) -> Result<AccountModel> {
         let obj = self.get_account(id).await?;
         let mut obj: AccountActiveModel = obj.into();
         if let Some(email) = &req.email {
@@ -188,7 +189,7 @@ impl super::Repository for PostgresRepository {
         &self,
         account_id: &str,
         device_id: &str,
-        req: &DeviceUpdateReq,
+        req: &UpdateDevice,
     ) -> Result<DeviceModelWithRelated> {
         let device_with_labels = self.get_device_with_labels(account_id, device_id).await?;
         if device_with_labels.device.account_id != account_id {
@@ -244,7 +245,7 @@ impl super::Repository for PostgresRepository {
     async fn create_device(
         &self,
         account_id: &str,
-        req: &DeviceCreateReq,
+        req: &CreateDevice,
     ) -> Result<DeviceModelWithRelated> {
         let device_id = xid::new().to_string();
         let new_device = devices::ActiveModel {
@@ -282,11 +283,7 @@ impl super::Repository for PostgresRepository {
         self.get_device_with_labels(account_id, &device_id).await
     }
 
-    async fn create_schema(
-        &self,
-        account_id: &str,
-        schema: &SchemaCreateReq,
-    ) -> Result<SchemaModel> {
+    async fn create_schema(&self, account_id: &str, schema: &CreateSchema) -> Result<SchemaModel> {
         let new_schema = SchemaActiveModel {
             id: Set(xid::new().to_string()),
             account_id: Set(account_id.to_string()),
@@ -296,14 +293,19 @@ impl super::Repository for PostgresRepository {
         let new_schema = new_schema.insert(&self.conn).await?;
         Ok(new_schema)
     }
-    async fn get_schema(&self, account_id: &str, schema_id: &str) -> Result<SchemaModel> {
+    async fn get_schema(
+        &self,
+        account_id: &str,
+        schema_id: &str,
+    ) -> Result<SchemaModelWithRelated> {
         let schema = SchemaEntity::find()
             .filter(schemas::Column::Id.eq(schema_id))
             .filter(schemas::Column::AccountId.eq(account_id))
             .one(&self.conn)
             .await?
             .ok_or(NotFoundError)?;
-        Ok(schema)
+        let fields = schema.find_related(FieldEntity).all(&self.conn).await?;
+        Ok(SchemaModelWithRelated { schema, fields })
     }
     async fn list_schema(
         &self,
@@ -333,7 +335,7 @@ impl super::Repository for PostgresRepository {
         &self,
         account_id: &str,
         schema_id: &str,
-        req: &SchemaUpdateReq,
+        req: &UpdateSchema,
     ) -> Result<SchemaModel> {
         let schema = SchemaEntity::find()
             .filter(schemas::Column::Id.eq(schema_id))
@@ -380,7 +382,7 @@ impl super::Repository for PostgresRepository {
         &self,
         account_id: &str,
         schema_id: &str,
-        field: &FieldCreateReq,
+        field: &CreateField,
     ) -> Result<FieldModel> {
         self.get_schema(account_id, schema_id).await?;
         let new_field = FieldActiveModel {
@@ -398,7 +400,7 @@ impl super::Repository for PostgresRepository {
         account_id: &str,
         schema_id: &str,
         identifier: &str,
-        req: &FieldUpdateReq,
+        req: &UpdateField,
     ) -> Result<FieldModel> {
         let field = FieldEntity::find()
             .left_join(SchemaEntity)

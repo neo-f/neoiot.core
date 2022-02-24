@@ -8,6 +8,7 @@ lazy_static! {
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
+    pub endpoint: String,
     pub postgres_url: String,
     pub secret: String,
 }
@@ -18,7 +19,8 @@ impl Settings {
         let builder = Config::builder()
             .add_source(File::with_name(&format!("config/{}.yaml", env)).required(false))
             .add_source(File::with_name("config/local.yaml").required(false))
-            .add_source(Environment::with_prefix("NEOIOT"));
+            .add_source(Environment::with_prefix("NEOIOT"))
+            .set_default("endpoint", "0.0.0.0:3000")?;
         builder.build()?.try_deserialize()
     }
 }

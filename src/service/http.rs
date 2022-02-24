@@ -38,7 +38,7 @@ impl APIv1 {
         &self,
         state: Data<&AppState>,
         data: Json<io_schema::Login>,
-    ) -> Result<Json<io_schema::LoginResp>> {
+    ) -> Result<Json<io_schema::Token>> {
         let account = state
             .repo
             .get_account_by_email(&data.email)
@@ -51,7 +51,7 @@ impl APIv1 {
             Claims::create(jwt_simple::prelude::Duration::from_days(1)).with_subject(account.id);
         let key = HS256Key::from_bytes(SETTINGS.read().unwrap().secret.as_bytes());
         let token = key.authenticate(claims)?;
-        Ok(Json(io_schema::LoginResp { token }))
+        Ok(Json(io_schema::Token { token }))
     }
 
     /// 创建账号(需要管理员权限)
@@ -60,8 +60,8 @@ impl APIv1 {
         &self,
         account: JWTAuthorization,
         state: Data<&AppState>,
-        body: Json<io_schema::AccountCreateReq>,
-    ) -> Result<Json<io_schema::AccountResp>> {
+        body: Json<io_schema::CreateAccount>,
+    ) -> Result<Json<io_schema::Account>> {
         let account = state.repo.get_account(&account.0).await?;
         if !account.is_superuser {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
@@ -86,7 +86,7 @@ impl APIv1 {
         page_size: Query<usize>,
         /// 模糊查询账号名称
         q: Query<Option<String>>,
-    ) -> Result<Json<io_schema::AccountListResp>> {
+    ) -> Result<Json<io_schema::Accounts>> {
         let account = state.repo.get_account(&account.0).await?;
         if !account.is_superuser {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
@@ -95,7 +95,7 @@ impl APIv1 {
             .repo
             .list_account(page.0, page_size.0, id_in.clone(), q.clone())
             .await?;
-        Ok(Json(io_schema::AccountListResp {
+        Ok(Json(io_schema::Accounts {
             results: schema.into_iter().map(|account| account.into()).collect(),
             total,
         }))
@@ -113,7 +113,7 @@ impl APIv1 {
         account: JWTAuthorization,
         /// 要获取的账户ID
         account_id: Path<String>,
-    ) -> Result<Json<io_schema::AccountResp>> {
+    ) -> Result<Json<io_schema::Account>> {
         let account = state.repo.get_account(&account.0).await?;
         if !account.is_superuser {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
@@ -134,8 +134,8 @@ impl APIv1 {
         state: Data<&AppState>,
         /// 要更新的账户ID
         account_id: Path<String>,
-        body: Json<io_schema::AccountUpdateReq>,
-    ) -> Result<Json<io_schema::AccountResp>> {
+        body: Json<io_schema::UpdateAccount>,
+    ) -> Result<Json<io_schema::Account>> {
         let account = state.repo.get_account(&account.0).await?;
         if !account.is_superuser {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
@@ -171,8 +171,8 @@ impl APIv1 {
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        body: Json<io_schema::DeviceCreateReq>,
-    ) -> Result<Json<io_schema::DeviceResp>> {
+        body: Json<io_schema::CreateDevice>,
+    ) -> Result<Json<io_schema::DeviceWithLables>> {
         let device = state.repo.create_device(&account.0, &body).await?;
         Ok(Json(device.into()))
     }
@@ -196,7 +196,7 @@ impl APIv1 {
         page_size: Query<usize>,
         /// 模糊查询设备名称
         q: Query<Option<String>>,
-    ) -> Result<Json<io_schema::DeviceListResp>> {
+    ) -> Result<Json<io_schema::Devices>> {
         let (devices, total) = state
             .repo
             .list_device(
@@ -208,7 +208,7 @@ impl APIv1 {
                 q.clone(),
             )
             .await?;
-        Ok(Json(io_schema::DeviceListResp {
+        Ok(Json(io_schema::Devices {
             results: devices.into_iter().map(|device| device.into()).collect(),
             total,
         }))
@@ -221,7 +221,7 @@ impl APIv1 {
         state: Data<&AppState>,
         account: JWTAuthorization,
         device_id: Path<String>,
-    ) -> Result<Json<io_schema::DeviceResp>> {
+    ) -> Result<Json<io_schema::DeviceWithLables>> {
         let device = state
             .repo
             .get_device_with_labels(&account.0, &device_id)
@@ -235,8 +235,8 @@ impl APIv1 {
         state: Data<&AppState>,
         account: JWTAuthorization,
         device_id: Path<String>,
-        body: Json<io_schema::DeviceUpdateReq>,
-    ) -> Result<Json<io_schema::DeviceResp>> {
+        body: Json<io_schema::UpdateDevice>,
+    ) -> Result<Json<io_schema::DeviceWithLables>> {
         let device = state
             .repo
             .update_device(&account.0, &device_id, &body)
@@ -277,7 +277,7 @@ impl APIv1 {
         /// 每页条目数
         #[oai(default = "default_page_size")]
         page_size: Query<usize>,
-    ) -> Result<Json<io_schema::DeviceConnectionsListResp>> {
+    ) -> Result<Json<io_schema::DeviceConnections>> {
         let result = state
             .repo
             .list_device_connections(&account.0, &device_id, page.0, page_size.0)
@@ -291,8 +291,8 @@ impl APIv1 {
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
-        body: Json<io_schema::SchemaCreateReq>,
-    ) -> Result<Json<io_schema::SchemaResp>> {
+        body: Json<io_schema::CreateSchema>,
+    ) -> Result<Json<io_schema::Schema>> {
         let schema = state.repo.create_schema(&account.0, &body).await?;
         Ok(Json(schema.into()))
     }
@@ -313,12 +313,12 @@ impl APIv1 {
         page_size: Query<usize>,
         /// 模糊查询数据模型名称
         q: Query<Option<String>>,
-    ) -> Result<Json<io_schema::SchemaListResp>> {
+    ) -> Result<Json<io_schema::Schemas>> {
         let (schemas, total) = state
             .repo
             .list_schema(&account.0, page.0, page_size.0, id_in.clone(), q.clone())
             .await?;
-        Ok(Json(io_schema::SchemaListResp {
+        Ok(Json(io_schema::Schemas {
             results: schemas.into_iter().map(|schema| schema.into()).collect(),
             total,
         }))
@@ -331,7 +331,7 @@ impl APIv1 {
         state: Data<&AppState>,
         account: JWTAuthorization,
         schema_id: Path<String>,
-    ) -> Result<Json<io_schema::SchemaResp>> {
+    ) -> Result<Json<io_schema::SchemaWithFields>> {
         let schema = state.repo.get_schema(&account.0, &schema_id).await?;
         Ok(Json(schema.into()))
     }
@@ -343,8 +343,8 @@ impl APIv1 {
         state: Data<&AppState>,
         account: JWTAuthorization,
         schema_id: Path<String>,
-        body: Json<io_schema::SchemaUpdateReq>,
-    ) -> Result<Json<io_schema::SchemaResp>> {
+        body: Json<io_schema::UpdateSchema>,
+    ) -> Result<Json<io_schema::Schema>> {
         let schema = state
             .repo
             .update_schema(&account.0, &schema_id, &body)
@@ -370,7 +370,7 @@ impl APIv1 {
 
     /// 数据模型添加属性
     #[oai(
-        path = "/schema/:schema_id/Field",
+        path = "/schema/:schema_id/field",
         method = "post",
         tag = "ApiTags::Schema"
     )]
@@ -379,8 +379,8 @@ impl APIv1 {
         state: Data<&AppState>,
         account: JWTAuthorization,
         schema_id: Path<String>,
-        body: Json<io_schema::FieldCreateReq>,
-    ) -> Result<Json<io_schema::FieldResp>> {
+        body: Json<io_schema::CreateField>,
+    ) -> Result<Json<io_schema::Field>> {
         let field = state
             .repo
             .create_field(&account.0, &schema_id, &body)
@@ -390,18 +390,19 @@ impl APIv1 {
 
     /// 数据模型更新属性
     #[oai(
-        path = "/schema/:schema_id/Field/:identifier",
+        path = "/schema/:schema_id/field/:identifier",
         method = "patch",
         tag = "ApiTags::Schema"
     )]
+
     async fn update_field(
         &self,
         state: Data<&AppState>,
         account: JWTAuthorization,
         schema_id: Path<String>,
         identifier: Path<String>,
-        body: Json<io_schema::FieldUpdateReq>,
-    ) -> Result<Json<io_schema::FieldResp>> {
+        body: Json<io_schema::UpdateField>,
+    ) -> Result<Json<io_schema::Field>> {
         let field = state
             .repo
             .update_field(&account.0, &schema_id, &identifier, &body)

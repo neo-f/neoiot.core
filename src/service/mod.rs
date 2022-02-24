@@ -34,12 +34,14 @@ async fn get_db_conn() -> Result<DatabaseConnection, std::io::Error> {
 
 pub async fn run() {
     let conn = get_db_conn().await.unwrap();
-    let repo = PostgresRepository::new(conn).await;
+    let repo = PostgresRepository::new(conn);
+    let settings = SETTINGS.read().unwrap();
+    repo.initial_admin().await;
     let state = AppState {
         repo: Arc::new(Box::new(repo)),
     };
     let api_service = OpenApiService::new(APIv1::default(), "NEOIOT Core", "v1.0")
-        .server("http://localhost:3000/api");
+        .server(format!("http://{}/api", settings.endpoint.clone()));
     let redoc = api_service.redoc();
     let swagger = api_service.swagger_ui();
     let rapidoc = api_service.rapidoc();
@@ -51,7 +53,7 @@ pub async fn run() {
             middleware::TrailingSlash::Trim,
         ))
         .with(middleware::Compression::default());
-    Server::new(TcpListener::bind("127.0.0.1:3000"))
+    Server::new(TcpListener::bind(settings.endpoint.as_str()))
         .run(
             Route::new()
                 .nest("/api", api_service)
