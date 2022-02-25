@@ -321,8 +321,6 @@ pub struct Field {
     pub id: String,
     /// 字段唯一标识符
     pub identifier: String,
-    // 所属数据模型ID
-    pub schema_id: String,
     // 数据类型
     pub data_type: fields::DataType,
     // 备注信息
@@ -337,7 +335,6 @@ impl From<FieldModel> for Field {
         Self {
             id: obj.id.clone(),
             identifier: obj.identifier,
-            schema_id: obj.schema_id,
             data_type: obj.data_type,
             comment: obj.comment,
             unit: obj.unit,

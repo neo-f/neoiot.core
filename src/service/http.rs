@@ -1,4 +1,5 @@
 use super::{auth::JWTAuthorization, AppState};
+use crate::repository::Repository;
 use crate::{config::SETTINGS, io_schema};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use jwt_simple::prelude::*;
@@ -395,7 +396,6 @@ impl APIv1 {
         method = "patch",
         tag = "ApiTags::Schema"
     )]
-
     async fn update_field(
         &self,
         state: Data<&AppState>,
@@ -409,6 +409,25 @@ impl APIv1 {
             .update_field(&account.0, &schema_id, &identifier, &body)
             .await?;
         Ok(Json(field.into()))
+    }
+    /// 数据模型删除字段
+    #[oai(
+        path = "/schema/:schema_id/field/:identifier",
+        method = "delete",
+        tag = "ApiTags::Schema"
+    )]
+    async fn delete_field(
+        &self,
+        state: Data<&AppState>,
+        account: JWTAuthorization,
+        schema_id: Path<String>,
+        identifier: Path<String>,
+    ) -> Result<()> {
+        state
+            .repo
+            .delete_field(&account.0, &schema_id, &identifier)
+            .await?;
+        Ok(())
     }
 
     // async fn send_command(

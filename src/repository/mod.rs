@@ -97,4 +97,6 @@ pub trait Repository: Send + Sync + 'static {
         identifier: &str,
         req: &io_schema::UpdateField,
     ) -> Result<FieldModel>;
+    async fn delete_field(&self, account_id: &str, schema_id: &str, identifier: &str)
+        -> Result<()>;
 }

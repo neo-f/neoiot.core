@@ -1,6 +1,6 @@
 mod auth;
 mod http;
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use entity::sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use poem::{listener::TcpListener, middleware, EndpointExt, Route, Server};
@@ -14,8 +14,8 @@ use crate::{
 use self::http::APIv1;
 
 #[derive(Clone)]
-pub struct AppState {
-    pub repo: Arc<Box<dyn Repository>>,
+pub struct AppState<T: Repository + Clone = PostgresRepository> {
+    pub repo: T,
 }
 
 async fn get_db_conn() -> Result<DatabaseConnection, std::io::Error> {
@@ -37,9 +37,7 @@ pub async fn run() {
     let repo = PostgresRepository::new(conn);
     let settings = SETTINGS.read().unwrap();
     repo.initial_admin().await;
-    let state = AppState {
-        repo: Arc::new(Box::new(repo)),
-    };
+    let state = AppState { repo };
     let api_service = OpenApiService::new(APIv1::default(), "NEOIOT Core", "v1.0")
         .server(format!("http://{}/api", settings.endpoint.clone()));
     let redoc = api_service.redoc();

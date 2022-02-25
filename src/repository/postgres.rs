@@ -23,6 +23,7 @@ use crate::io_schema::{
 
 use super::Repository;
 
+#[derive(Clone)]
 pub struct PostgresRepository {
     pub conn: DatabaseConnection,
 }
@@ -433,6 +434,23 @@ impl super::Repository for PostgresRepository {
         };
         let field = field.update(&self.conn).await?;
         Ok(field)
+    }
+    async fn delete_field(
+        &self,
+        account_id: &str,
+        schema_id: &str,
+        identifier: &str,
+    ) -> Result<()> {
+        let field = FieldEntity::find()
+            .left_join(SchemaEntity)
+            .filter(schemas::Column::AccountId.eq(account_id))
+            .filter(fields::Column::SchemaId.eq(schema_id))
+            .filter(fields::Column::Identifier.eq(identifier))
+            .one(&self.conn)
+            .await?
+            .ok_or(NotFoundError)?;
+        field.delete(&self.conn).await?;
+        Ok(())
     }
 }
 
