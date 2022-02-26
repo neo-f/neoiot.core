@@ -1,8 +1,9 @@
 use chrono::{DateTime, Local};
 use entity::{fields, prelude::*};
 use poem_openapi::{
+    payload::Json,
     types::{Email, Password},
-    Object,
+    ApiResponse, Enum, Object,
 };
 
 #[derive(Debug, Object, Clone, PartialEq)]
@@ -227,6 +228,70 @@ pub struct Devices {
     pub results: Vec<Device>,
     /// 总数
     pub total: usize,
+}
+
+const fn default_qos() -> u8 {
+    1
+}
+const fn default_async() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Enum)]
+pub enum PayloadCodec {
+    /// 不压缩
+    Plain,
+    /// Base64编码
+    Base64,
+}
+impl Default for PayloadCodec {
+    fn default() -> Self {
+        PayloadCodec::Plain
+    }
+}
+
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct SendCommandToDevice {
+    /// 指令名称
+    pub command: String,
+    /// 编码类型
+    pub codec: PayloadCodec,
+    /// 负载信息
+    pub payload: String,
+    /// 是否异步发送
+    /// - 同步模式下，设备端接收到指令后，会返回指令执行结果
+    /// - 异步模式下，设备端接收到指令后，不会返回指令执行结果，只返回消息ID
+    #[oai(default = "default_async")]
+    pub is_async: bool,
+    /// 指令过期时间(秒)
+    pub ttl: Option<usize>,
+    /// 指令QOS
+    #[oai(
+        default = "default_qos",
+        validator(maximum(value = "2"), minimum(value = "0"))
+    )]
+    pub qos: u8,
+}
+
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct SyncCommandResponse {
+    /// 编码类型
+    pub codec: PayloadCodec,
+    /// 负载信息
+    pub payload: String,
+}
+
+#[derive(Debug, Object, Clone, PartialEq)]
+pub struct AsyncCommandResponse {
+    pub message_id: String,
+}
+
+#[derive(ApiResponse)]
+pub enum CommandResponse {
+    #[oai(status = "201")]
+    _Sync(Json<SyncCommandResponse>),
+    #[oai(status = "202")]
+    Async(Json<AsyncCommandResponse>),
 }
 
 #[derive(Debug, Object, Clone, PartialEq)]

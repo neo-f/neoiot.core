@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::time::SystemTime;
 
-use anyhow::Result;
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use chrono::Local;
@@ -12,13 +11,21 @@ use entity::sea_orm::{
 };
 use entity::{accounts, device_connections, devices, fields, labels, schemas};
 use poem::async_trait;
-use poem::error::NotFoundError;
-use poem_openapi::types::{Email, Password};
+use poem_openapi::{
+    payload::Json,
+    types::{Email, Password},
+};
 use rand_core::OsRng;
 
-use crate::io_schema::{
-    CreateAccount, CreateDevice, CreateField, CreateSchema, DeviceModelWithRelated,
-    SchemaModelWithRelated, UpdateAccount, UpdateDevice, UpdateField, UpdateSchema,
+use crate::{
+    errors::NeoiotError,
+    errors::Result,
+    io_schema::{
+        AsyncCommandResponse, CommandResponse, CreateAccount, CreateDevice, CreateField,
+        CreateSchema, DeviceModelWithRelated, SchemaModelWithRelated, SendCommandToDevice,
+        UpdateAccount, UpdateDevice, UpdateField, UpdateSchema,
+    },
+    topics::{self, Message, Topics},
 };
 
 use super::Repository;
@@ -68,7 +75,7 @@ impl super::Repository for PostgresRepository {
         let obj = AccountEntity::find_by_id(account_id.to_string())
             .one(&self.conn)
             .await?
-            .ok_or(NotFoundError)?;
+            .ok_or_else(|| NeoiotError::ObjectNotFound("account".to_string()))?;
         Ok(obj)
     }
     async fn get_account_by_email(&self, email: &str) -> Result<AccountModel> {
@@ -76,7 +83,7 @@ impl super::Repository for PostgresRepository {
             .filter(accounts::Column::Email.eq(email))
             .one(&self.conn)
             .await?
-            .ok_or(NotFoundError)?;
+            .ok_or_else(|| NeoiotError::ObjectNotFound("account".to_string()))?;
         Ok(obj)
     }
     async fn after_account_logined(&self, email: &str) -> Result<()> {
@@ -137,7 +144,7 @@ impl super::Repository for PostgresRepository {
             .filter(devices::Column::AccountId.eq(account_id))
             .one(&self.conn)
             .await?
-            .ok_or(NotFoundError)?;
+            .ok_or_else(|| NeoiotError::ObjectNotFound("device".to_string()))?;
         Ok(device)
     }
 
@@ -152,7 +159,7 @@ impl super::Repository for PostgresRepository {
             .filter(devices::Column::AccountId.eq(account_id))
             .one(&self.conn)
             .await?
-            .ok_or(NotFoundError)?;
+            .ok_or_else(|| NeoiotError::ObjectNotFound("device".to_string()))?;
         let labels = device.find_related(LabelEntity).all(&self.conn).await?;
         Ok(DeviceModelWithRelated {
             device,
@@ -201,9 +208,6 @@ impl super::Repository for PostgresRepository {
         req: &UpdateDevice,
     ) -> Result<DeviceModelWithRelated> {
         let device_with_labels = self.get_device_with_labels(account_id, device_id).await?;
-        if device_with_labels.device.account_id != account_id {
-            return Err(NotFoundError.into());
-        }
         let mut device: devices::ActiveModel = device_with_labels.device.into();
         //1. change device tags
         if let Some(new_labels) = &req.labels {
@@ -292,6 +296,49 @@ impl super::Repository for PostgresRepository {
         self.get_device_with_labels(account_id, &device_id).await
     }
 
+    async fn list_device_connections(
+        &self,
+        account_id: &str,
+        device_id: &str,
+        page: usize,
+        page_size: usize,
+    ) -> Result<(Vec<DeviceConnectionModel>, usize)> {
+        self.get_device(account_id, device_id).await?;
+        let paginator = DeviceConnectionEntity::find()
+            .filter(device_connections::Column::DeviceId.eq(device_id))
+            .order_by_asc(device_connections::Column::Id)
+            .paginate(&self.conn, page_size);
+        let connections = paginator.fetch_page(page - 1).await?;
+        let total = paginator.num_items().await?;
+
+        Ok((connections, total))
+    }
+    async fn send_command_to_device(
+        &self,
+        account_id: &str,
+        device_id: &str,
+        req: &SendCommandToDevice,
+    ) -> Result<CommandResponse> {
+        let _device = self.get_device(account_id, device_id).await?;
+        let command = topics::Command::new(account_id, device_id, &req.command.clone(), req.ttl);
+        let message_id = command.message_id.clone();
+        Message::new(Topics::Command(command), req.payload.clone())
+            .publish(req.qos)
+            .await?;
+        if !req.is_async {
+            return Err(NeoiotError::NotImplemented);
+        }
+        Ok(CommandResponse::Async(Json(AsyncCommandResponse {
+            message_id,
+        })))
+        // Ok(CommandResponse::Async(Json(SyncCommandResponse{}))
+
+        // // TODO:
+        // Ok(CommandResponse::Sync(SyncCommandResponse {
+        //     codec: todo!(),
+        //     payload: todo!(),
+        // }))
+    }
     async fn create_schema(&self, account_id: &str, schema: &CreateSchema) -> Result<SchemaModel> {
         let new_schema = SchemaActiveModel {
             id: Set(xid::new().to_string()),
@@ -302,7 +349,8 @@ impl super::Repository for PostgresRepository {
         let new_schema = new_schema.insert(&self.conn).await?;
         Ok(new_schema)
     }
-    async fn get_schema(
+
+    async fn get_schema_with_related(
         &self,
         account_id: &str,
         schema_id: &str,
@@ -312,10 +360,20 @@ impl super::Repository for PostgresRepository {
             .filter(schemas::Column::AccountId.eq(account_id))
             .one(&self.conn)
             .await?
-            .ok_or(NotFoundError)?;
+            .ok_or_else(|| NeoiotError::ObjectNotFound("schema".to_string()))?;
         let fields = schema.find_related(FieldEntity).all(&self.conn).await?;
         Ok(SchemaModelWithRelated { schema, fields })
     }
+    async fn get_schema(&self, account_id: &str, schema_id: &str) -> Result<SchemaModel> {
+        let schema = SchemaEntity::find()
+            .filter(schemas::Column::Id.eq(schema_id))
+            .filter(schemas::Column::AccountId.eq(account_id))
+            .one(&self.conn)
+            .await?
+            .ok_or_else(|| NeoiotError::ObjectNotFound("schema".to_string()))?;
+        Ok(schema)
+    }
+
     async fn list_schema(
         &self,
         account_id: &str,
@@ -339,19 +397,13 @@ impl super::Repository for PostgresRepository {
 
         Ok((schemas, total))
     }
-
     async fn update_schema(
         &self,
         account_id: &str,
         schema_id: &str,
         req: &UpdateSchema,
     ) -> Result<SchemaModel> {
-        let schema = SchemaEntity::find()
-            .filter(schemas::Column::Id.eq(schema_id))
-            .filter(schemas::Column::AccountId.eq(account_id))
-            .one(&self.conn)
-            .await?
-            .ok_or(NotFoundError)?;
+        let schema = self.get_schema(account_id, schema_id).await?;
         let mut schema: schemas::ActiveModel = schema.into();
         if let Some(name) = &req.name {
             schema.name = Set(name.clone());
@@ -359,34 +411,28 @@ impl super::Repository for PostgresRepository {
         let schema = schema.update(&self.conn).await?;
         Ok(schema)
     }
+
     async fn delete_schema(&self, account_id: &str, schema_id: &str) -> Result<()> {
-        let schema = SchemaEntity::find()
-            .filter(schemas::Column::Id.eq(schema_id))
-            .filter(schemas::Column::AccountId.eq(account_id))
-            .one(&self.conn)
-            .await?
-            .ok_or(NotFoundError)?;
+        let schema = self.get_schema(account_id, schema_id).await?;
         schema.delete(&self.conn).await?;
         Ok(())
     }
-    async fn list_device_connections(
+    async fn get_field(
         &self,
         account_id: &str,
-        device_id: &str,
-        page: usize,
-        page_size: usize,
-    ) -> Result<(Vec<DeviceConnectionModel>, usize)> {
-        self.get_device(account_id, device_id).await?;
-        let paginator = DeviceConnectionEntity::find()
-            .filter(device_connections::Column::DeviceId.eq(device_id))
-            .order_by_asc(device_connections::Column::Id)
-            .paginate(&self.conn, page_size);
-        let connections = paginator.fetch_page(page - 1).await?;
-        let total = paginator.num_items().await?;
-
-        Ok((connections, total))
+        schema_id: &str,
+        identifier: &str,
+    ) -> Result<FieldModel> {
+        let field = FieldEntity::find()
+            .left_join(SchemaEntity)
+            .filter(schemas::Column::AccountId.eq(account_id))
+            .filter(fields::Column::SchemaId.eq(schema_id))
+            .filter(fields::Column::Identifier.eq(identifier))
+            .one(&self.conn)
+            .await?
+            .ok_or_else(|| NeoiotError::ObjectNotFound("field".to_string()))?;
+        Ok(field)
     }
-
     async fn create_field(
         &self,
         account_id: &str,
@@ -411,14 +457,7 @@ impl super::Repository for PostgresRepository {
         identifier: &str,
         req: &UpdateField,
     ) -> Result<FieldModel> {
-        let field = FieldEntity::find()
-            .left_join(SchemaEntity)
-            .filter(schemas::Column::AccountId.eq(account_id))
-            .filter(fields::Column::SchemaId.eq(schema_id))
-            .filter(fields::Column::Identifier.eq(identifier))
-            .one(&self.conn)
-            .await?
-            .ok_or(NotFoundError)?;
+        let field = self.get_field(account_id, schema_id, identifier).await?;
         let mut field: FieldActiveModel = field.into();
         if let Some(identifier) = &req.identifier {
             field.identifier = Set(identifier.clone());
@@ -435,20 +474,14 @@ impl super::Repository for PostgresRepository {
         let field = field.update(&self.conn).await?;
         Ok(field)
     }
+
     async fn delete_field(
         &self,
         account_id: &str,
         schema_id: &str,
         identifier: &str,
     ) -> Result<()> {
-        let field = FieldEntity::find()
-            .left_join(SchemaEntity)
-            .filter(schemas::Column::AccountId.eq(account_id))
-            .filter(fields::Column::SchemaId.eq(schema_id))
-            .filter(fields::Column::Identifier.eq(identifier))
-            .one(&self.conn)
-            .await?
-            .ok_or(NotFoundError)?;
+        let field = self.get_field(account_id, schema_id, identifier).await?;
         field.delete(&self.conn).await?;
         Ok(())
     }

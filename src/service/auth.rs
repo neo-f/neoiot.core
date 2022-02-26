@@ -15,7 +15,7 @@ use crate::config::SETTINGS;
 pub struct JWTAuthorization(pub String);
 
 async fn api_checker(_: &Request, api_key: Bearer) -> Option<String> {
-    let key = HS256Key::from_bytes(SETTINGS.read().unwrap().secret.as_bytes());
+    let key = HS256Key::from_bytes(SETTINGS.secret.as_bytes());
     let ret = key
         .verify_token::<JWTClaims<NoCustomClaims>>(api_key.token.as_str(), None)
         .ok()?;

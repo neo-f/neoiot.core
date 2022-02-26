@@ -5,8 +5,10 @@ extern crate serde_derive;
 mod config;
 mod errors;
 mod io_schema;
+mod mqtt_client;
 mod repository;
 mod service;
+mod topics;
 
 #[tokio::main]
 async fn main() {

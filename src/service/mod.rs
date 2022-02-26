@@ -19,7 +19,7 @@ pub struct AppState<T: Repository + Clone = PostgresRepository> {
 }
 
 async fn get_db_conn() -> Result<DatabaseConnection, std::io::Error> {
-    let url = &SETTINGS.read().unwrap().postgres_url;
+    let url = &SETTINGS.postgres_url;
     let mut opt = ConnectOptions::new(url.to_owned());
     opt.max_connections(100)
         .min_connections(5)
@@ -35,11 +35,10 @@ async fn get_db_conn() -> Result<DatabaseConnection, std::io::Error> {
 pub async fn run() {
     let conn = get_db_conn().await.unwrap();
     let repo = PostgresRepository::new(conn);
-    let settings = SETTINGS.read().unwrap();
     repo.initial_admin().await;
     let state = AppState { repo };
     let api_service = OpenApiService::new(APIv1::default(), "NEOIOT Core", "v1.0")
-        .server(format!("http://{}/api", settings.endpoint.clone()));
+        .server(format!("http://{}/api", SETTINGS.endpoint.clone()));
     let redoc = api_service.redoc();
     let swagger = api_service.swagger_ui();
     let rapidoc = api_service.rapidoc();
@@ -51,7 +50,7 @@ pub async fn run() {
             middleware::TrailingSlash::Trim,
         ))
         .with(middleware::Compression::default());
-    Server::new(TcpListener::bind(settings.endpoint.as_str()))
+    Server::new(TcpListener::bind(SETTINGS.endpoint.as_str()))
         .run(
             Route::new()
                 .nest("/api", api_service)

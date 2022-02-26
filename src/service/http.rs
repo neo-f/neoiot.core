@@ -50,7 +50,7 @@ impl APIv1 {
         }
         let claims =
             Claims::create(jwt_simple::prelude::Duration::from_days(1)).with_subject(account.id);
-        let key = HS256Key::from_bytes(SETTINGS.read().unwrap().secret.as_bytes());
+        let key = HS256Key::from_bytes(SETTINGS.secret.as_bytes());
         let token = key.authenticate(claims)?;
         state.repo.after_account_logined(&data.email).await?;
         Ok(Json(io_schema::Token { token }))
@@ -261,6 +261,25 @@ impl APIv1 {
         state.repo.delete_device(&account.0, &device_id).await?;
         Ok(())
     }
+    /// 向设备发送指令
+    #[oai(
+        path = "/device/:device_id/command",
+        method = "post",
+        tag = "ApiTags::Device"
+    )]
+    async fn send_command_to_deivce(
+        &self,
+        state: Data<&AppState>,
+        account: JWTAuthorization,
+        device_id: Path<String>,
+        req: Json<io_schema::SendCommandToDevice>,
+    ) -> Result<io_schema::CommandResponse> {
+        let response = state
+            .repo
+            .send_command_to_device(&account.0, &device_id, &req)
+            .await?;
+        Ok(response)
+    }
 
     /// 查询设备连接信息列表
     #[oai(
@@ -334,7 +353,7 @@ impl APIv1 {
         account: JWTAuthorization,
         schema_id: Path<String>,
     ) -> Result<Json<io_schema::SchemaWithFields>> {
-        let schema = state.repo.get_schema(&account.0, &schema_id).await?;
+        let schema = state.repo.get_schema_with_related(&account.0, &schema_id).await?;
         Ok(Json(schema.into()))
     }
 
