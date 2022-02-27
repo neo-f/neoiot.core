@@ -82,7 +82,7 @@ pub trait Repository: Send + Sync + 'static {
         account_id: &str,
         device_id: &str,
         req: &oai_schema::SendCommandToDevice,
-    ) -> Result<oai_schema::CommandResponse>;
+    ) -> Result<String>;
 
     ////////////////////////////// 数据模型相关//////////////////////////////////////////////////////////
     /// 创建一个数据模型

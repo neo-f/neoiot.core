@@ -17,8 +17,8 @@ poem-openapi = { version = "1.3.5", features = [
   "email",
 ] }
 reqwest = { version = "0.11.9", features = ["json"] }
+redis = { version = "0.21.5", features = ["tokio-comp"] }
 chrono = "0.4.19"
-anyhow = "1.0.55"
 config = "0.12.0"
 rand = "0.8.5"
 serde = "1.0.136"

@@ -32,4 +32,3 @@ impl Related<super::devices::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-

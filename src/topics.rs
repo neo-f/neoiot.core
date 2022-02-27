@@ -11,14 +11,22 @@ pub struct Command {
     pub account_id: String,
     pub device_id: String,
     pub command: String,
+    pub is_sync: bool,
     pub ttl: Option<usize>,
 }
 
 impl Command {
-    pub fn new(account_id: &str, device_id: &str, command: &str, ttl: Option<usize>) -> Self {
+    pub fn new(
+        account_id: &str,
+        device_id: &str,
+        command: &str,
+        is_sync: bool,
+        ttl: Option<usize>,
+    ) -> Self {
         let message_id = xid::new().to_string();
         Self {
             message_id,
+            is_sync,
             account_id: account_id.to_string(),
             device_id: device_id.to_string(),
             command: command.to_string(),
@@ -26,9 +34,10 @@ impl Command {
         }
     }
     pub fn topic(&self) -> String {
+        let mode = if self.is_sync { "sync" } else { "async" };
         let topic = format!(
-            "cmd/{}/{}/{}/{}",
-            self.account_id, self.device_id, self.command, self.message_id,
+            "cmd/{}/{}/{}/{}/{}",
+            self.account_id, self.device_id, self.command, mode, self.message_id,
         );
         if let Some(ttl) = self.ttl {
             return format!("{}/{}", topic, ttl);
@@ -69,22 +78,26 @@ impl FromStr for Topics {
     fn from_str(topic: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = topic.split('/').collect();
         let message = match &parts[..] {
-            // cmd/:account_id/:device_id/:command/:messageID
-            ["cmd", account_id, device_id, command, message_id] => Topics::Command(Command {
+            // cmd/:account_id/:device_id/:command/:mode/:messageID
+            ["cmd", account_id, device_id, command, mode, message_id] => Topics::Command(Command {
                 message_id: message_id.to_string(),
                 account_id: account_id.to_string(),
                 device_id: device_id.to_string(),
                 command: command.to_string(),
+                is_sync: *mode == "sync",
                 ttl: None,
             }),
-            // cmd/:account_id/:device_id/:command/:messageID/:ttl
-            ["cmd", account_id, device_id, command, message_id, ttl] => Topics::Command(Command {
-                message_id: message_id.to_string(),
-                account_id: account_id.to_string(),
-                device_id: device_id.to_string(),
-                command: command.to_string(),
-                ttl: ttl.parse().ok(),
-            }),
+            // cmd/:account_id/:device_id/:command/:mode/:messageID/:ttl
+            ["cmd", account_id, device_id, command, mode, message_id, ttl] => {
+                Topics::Command(Command {
+                    message_id: message_id.to_string(),
+                    account_id: account_id.to_string(),
+                    device_id: device_id.to_string(),
+                    command: command.to_string(),
+                    is_sync: *mode == "sync",
+                    ttl: ttl.parse().ok(),
+                })
+            }
             _ => return Err(NeoiotError::InvalidTopic(topic.to_string())),
         };
         Ok(message)
@@ -96,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_topic() {
-        let topic = "cmd/test_account/test_device/test_command/test_message_id";
+        let topic = "cmd/test_account/test_device/test_command/sync/test_message_id";
         assert_eq!(
             topic.parse::<Topics>().unwrap(),
             Topics::Command(Command {
@@ -104,16 +117,18 @@ mod tests {
                 account_id: "test_account".to_string(),
                 device_id: "test_device".to_string(),
                 command: "test_command".to_string(),
+                is_sync: true,
                 ttl: None,
             })
         );
-        let topic = "cmd/test_account/test_device/test_command/test_message_id/3600";
+        let topic = "cmd/test_account/test_device/test_command/async/test_message_id/3600";
         assert_eq!(
             topic.parse::<Topics>().unwrap(),
             Topics::Command(Command {
                 message_id: "test_message_id".to_string(),
                 account_id: "test_account".to_string(),
                 device_id: "test_device".to_string(),
+                is_sync: false,
                 command: "test_command".to_string(),
                 ttl: Some(3600),
             })

@@ -239,6 +239,9 @@ const fn default_async() -> bool {
 const fn default_codec() -> PayloadCodec {
     PayloadCodec::Plain
 }
+const fn default_sync_timeout() -> usize {
+    10
+}
 
 #[derive(Debug, PartialEq, Enum)]
 pub enum PayloadCodec {
@@ -257,12 +260,18 @@ pub struct SendCommandToDevice {
     pub codec: PayloadCodec,
     /// 负载信息
     pub payload: String,
-    /// 是否异步发送
-    /// - 同步模式下，设备端接收到指令后，会返回指令执行结果
-    /// - 异步模式下，设备端接收到指令后，不会返回指令执行结果，只返回消息ID
+    /// 是否需要同步
+    /// - 同步模式下，发送指令后，接口会等待设备端指令执行结果并返回
+    /// - 异步模式下，发送指令后，立即返回消息ID，不会返回指令执行结果
     #[oai(default = "default_async")]
-    pub is_async: bool,
-    /// 指令过期时间(秒)
+    pub is_sync: bool,
+    /// 同步模式时的最大等待时长（秒）
+    #[oai(
+        default = "default_sync_timeout",
+        validator(maximum(value = "120"), minimum(value = "1"))
+    )]
+    pub sync_timeout: usize,
+    /// 指令过期时间（秒）
     pub ttl: Option<usize>,
     /// 指令QOS
     #[oai(
@@ -274,10 +283,8 @@ pub struct SendCommandToDevice {
 
 #[derive(Debug, Object, PartialEq)]
 pub struct SyncCommandResponse {
-    /// 编码类型
-    pub codec: PayloadCodec,
-    /// 负载信息
-    pub payload: String,
+    /// 设备响应
+    pub response: String,
 }
 
 #[derive(Debug, Object, PartialEq)]
@@ -289,10 +296,18 @@ pub struct AsyncCommandResponse {
 pub enum CommandResponse {
     /// 同步模式下，设备端接收到指令后，会返回指令执行结果
     #[oai(status = "201")]
-    _Sync(Json<SyncCommandResponse>),
+    Sync(Json<SyncCommandResponse>),
     /// 异步模式下，设备端接收到指令后，不会返回指令执行结果，只返回消息ID
     #[oai(status = "202")]
     Async(Json<AsyncCommandResponse>),
+}
+impl CommandResponse {
+    pub fn new_sync(response: String) -> Self {
+        CommandResponse::Sync(Json(SyncCommandResponse { response }))
+    }
+    pub fn new_async(message_id: String) -> Self {
+        CommandResponse::Async(Json(AsyncCommandResponse { message_id }))
+    }
 }
 
 #[derive(Debug, Object, PartialEq)]

@@ -9,6 +9,7 @@ lazy_static! {
 pub struct Settings {
     pub endpoint: String,
     pub postgres_url: String,
+    pub redis_url: String,
     pub secret: String,
     pub emqx: EmqxConfig,
 }

@@ -1,6 +1,6 @@
 use super::{default_page, default_page_size, ApiTags, AppState};
-use crate::oai_schema;
 use crate::{auth::JWTAuthorization, repository::Repository};
+use crate::{cache::Cache, oai_schema};
 use poem::web::Data;
 use poem::Result;
 use poem_openapi::param::{Path, Query};
@@ -109,11 +109,19 @@ impl DeviceService {
         device_id: Path<String>,
         req: Json<oai_schema::SendCommandToDevice>,
     ) -> Result<oai_schema::CommandResponse> {
-        let response = state
+        let message_id = state
             .repo
             .send_command_to_device(&account.0, &device_id, &req)
             .await?;
-        Ok(response)
+        if req.is_sync {
+            Ok(oai_schema::CommandResponse::new_async(message_id))
+        } else {
+            let response = state
+                .cache
+                .block_pop(&message_id, req.ttl.unwrap_or(10))
+                .await?;
+            Ok(oai_schema::CommandResponse::new_sync(response))
+        }
     }
 
     /// 查询设备连接信息列表

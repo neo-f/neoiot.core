@@ -1,30 +1,27 @@
-use std::collections::HashSet;
 use std::time::SystemTime;
+use std::{collections::HashSet, time::Duration};
 
 use crate::{
     errors::NeoiotError,
     errors::Result,
     oai_schema::{
-        AsyncCommandResponse, CommandResponse, CreateAccount, CreateDevice, CreateField,
-        CreateSchema, DeviceModelWithRelated, SchemaModelWithRelated, SendCommandToDevice,
-        UpdateAccount, UpdateDevice, UpdateField, UpdateSchema,
+        CreateAccount, CreateDevice, CreateField, CreateSchema, DeviceModelWithRelated,
+        SchemaModelWithRelated, SendCommandToDevice, UpdateAccount, UpdateDevice, UpdateField,
+        UpdateSchema,
     },
     topics::{self, Message, Topics},
 };
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use chrono::Local;
-use entity::prelude::*;
 use entity::sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, PaginatorTrait,
-    QueryFilter, QueryOrder, Set,
+    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, ModelTrait,
+    PaginatorTrait, QueryFilter, QueryOrder, Set,
 };
 use entity::{accounts, device_connections, devices, fields, labels, schemas};
+use entity::{prelude::*, sea_orm::ConnectOptions};
 use poem::async_trait;
-use poem_openapi::{
-    payload::Json,
-    types::{Email, Password},
-};
+use poem_openapi::types::{Email, Password};
 use rand_core::OsRng;
 
 use super::Repository;
@@ -38,7 +35,15 @@ const ADMIN_NAME: &str = "admin";
 const ADMIN_PASSWORD: &str = "123123";
 
 impl PostgresRepository {
-    pub fn new(conn: DatabaseConnection) -> Self {
+    pub async fn new(dsn: impl Into<String>) -> Self {
+        let mut opt = ConnectOptions::new(dsn.into());
+        opt.max_connections(100)
+            .min_connections(5)
+            .connect_timeout(Duration::from_secs(8))
+            .idle_timeout(Duration::from_secs(8))
+            .sqlx_logging(true);
+
+        let conn = Database::connect(opt).await.unwrap();
         Self { conn }
     }
     // 初始化管理员账号
@@ -317,26 +322,15 @@ impl super::Repository for PostgresRepository {
         account_id: &str,
         device_id: &str,
         req: &SendCommandToDevice,
-    ) -> Result<CommandResponse> {
+    ) -> Result<String> {
         let _device = self.get_device(account_id, device_id).await?;
-        let command = topics::Command::new(account_id, device_id, &req.command.clone(), req.ttl);
+        let command =
+            topics::Command::new(account_id, device_id, &req.command, req.is_sync, req.ttl);
         let message_id = command.message_id.clone();
         Message::new(Topics::Command(command), req.payload.clone())
             .publish(req.qos)
             .await?;
-        if !req.is_async {
-            return Err(NeoiotError::NotImplemented);
-        }
-        Ok(CommandResponse::Async(Json(AsyncCommandResponse {
-            message_id,
-        })))
-        // Ok(CommandResponse::Async(Json(SyncCommandResponse{}))
-
-        // // TODO:
-        // Ok(CommandResponse::Sync(SyncCommandResponse {
-        //     codec: todo!(),
-        //     payload: todo!(),
-        // }))
+        Ok(message_id)
     }
     async fn create_schema(&self, account_id: &str, schema: &CreateSchema) -> Result<SchemaModel> {
         let new_schema = SchemaActiveModel {

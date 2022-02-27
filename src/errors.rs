@@ -14,10 +14,10 @@ pub enum NeoiotError {
     EmqxManagementError(String),
     #[error("database error:{0}")]
     DatabaseError(#[from] sea_orm::DbErr),
+    #[error("redis error:{0}")]
+    RedisError(#[from] redis::RedisError),
     #[error("specified {0} not found")]
     ObjectNotFound(String),
-    #[error("feature not implemented yet")]
-    NotImplemented,
     #[error("authenticate failed")]
     AuthenticateError,
     #[error("permission denied")]
@@ -30,11 +30,11 @@ impl ResponseError for NeoiotError {
             NeoiotError::InvalidTopic(_) => StatusCode::BAD_REQUEST,
             NeoiotError::RequestClientError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             NeoiotError::EmqxManagementError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            NeoiotError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
             NeoiotError::DatabaseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             NeoiotError::ObjectNotFound(_) => StatusCode::BAD_REQUEST,
             NeoiotError::AuthenticateError => StatusCode::UNAUTHORIZED,
             NeoiotError::PermissionDenied => StatusCode::FORBIDDEN,
+            NeoiotError::RedisError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

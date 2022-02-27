@@ -3,6 +3,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
 mod auth;
+mod cache;
 mod config;
 mod errors;
 mod mqtt_client;

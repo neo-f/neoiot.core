@@ -2,13 +2,12 @@ mod account;
 mod auth;
 mod device;
 mod schema;
-use std::time::Duration;
 
-use entity::sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use poem::{listener::TcpListener, middleware, EndpointExt, Route, Server};
 use poem_openapi::{OpenApiService, Tags};
 
 use crate::{
+    cache::{Cache, RedisCache},
     config::SETTINGS,
     repository::{PostgresRepository, Repository},
 };
@@ -36,29 +35,16 @@ const fn default_page_size() -> usize {
 }
 
 #[derive(Clone)]
-pub struct AppState<T: Repository = PostgresRepository> {
-    pub repo: T,
-}
-
-async fn get_db_conn() -> Result<DatabaseConnection, std::io::Error> {
-    let url = &SETTINGS.postgres_url;
-    let mut opt = ConnectOptions::new(url.to_owned());
-    opt.max_connections(100)
-        .min_connections(5)
-        .connect_timeout(Duration::from_secs(8))
-        .idle_timeout(Duration::from_secs(8))
-        .sqlx_logging(true);
-
-    println!("{}", url);
-    let db = Database::connect(opt).await.unwrap();
-    Ok(db)
+pub struct AppState<R: Repository = PostgresRepository, C: Cache = RedisCache> {
+    pub repo: R,
+    pub cache: C,
 }
 
 pub async fn run() {
-    let conn = get_db_conn().await.unwrap();
-    let repo = PostgresRepository::new(conn);
+    let repo = PostgresRepository::new(SETTINGS.postgres_url.clone()).await;
+    let cache = RedisCache::new(SETTINGS.redis_url.clone()).await;
     repo.initial_admin().await;
-    let state = AppState { repo };
+    let state = AppState { repo, cache };
     let api_service = OpenApiService::new(
         (AuthService, AccountService, DeviceService, SchemaService),
         "NEOIOT Core",
@@ -71,7 +57,7 @@ pub async fn run() {
 
     let api_service = api_service
         .with(middleware::Tracing::default())
-        .with(middleware::Cors::default())
+        .with(middleware::Cors::new())
         .with(middleware::NormalizePath::new(
             middleware::TrailingSlash::Trim,
         ))
