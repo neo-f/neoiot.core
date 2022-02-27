@@ -1,7 +1,8 @@
 use entity::sea_orm;
 use poem::{error::ResponseError, http::StatusCode};
+use std::fmt::Debug;
 
-pub type Result<T, E = NeoiotError> = core::result::Result<T, E>;
+pub type Result<T> = std::result::Result<T, NeoiotError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum NeoiotError {
@@ -17,6 +18,10 @@ pub enum NeoiotError {
     ObjectNotFound(String),
     #[error("feature not implemented yet")]
     NotImplemented,
+    #[error("authenticate failed")]
+    AuthenticateError,
+    #[error("permission denied")]
+    PermissionDenied,
 }
 
 impl ResponseError for NeoiotError {
@@ -28,6 +33,8 @@ impl ResponseError for NeoiotError {
             NeoiotError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
             NeoiotError::DatabaseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             NeoiotError::ObjectNotFound(_) => StatusCode::BAD_REQUEST,
+            NeoiotError::AuthenticateError => StatusCode::UNAUTHORIZED,
+            NeoiotError::PermissionDenied => StatusCode::FORBIDDEN,
         }
     }
 }

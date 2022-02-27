@@ -24,7 +24,7 @@ impl Settings {
     pub fn default() -> Result<Self, ConfigError> {
         let env = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
         let builder = Config::builder()
-            .add_source(File::with_name(&format!("config/{}.yaml", env)).required(false))
+            .add_source(File::with_name(&format!("config/{}.toml", env)).required(false))
             .add_source(File::with_name("config/local.yaml").required(false))
             .add_source(Environment::with_prefix("NEOIOT"))
             .set_default("endpoint", "0.0.0.0:3000")?;

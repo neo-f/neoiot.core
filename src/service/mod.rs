@@ -1,20 +1,42 @@
+mod account;
 mod auth;
-mod http;
+mod device;
+mod schema;
 use std::time::Duration;
 
 use entity::sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use poem::{listener::TcpListener, middleware, EndpointExt, Route, Server};
-use poem_openapi::OpenApiService;
+use poem_openapi::{OpenApiService, Tags};
 
 use crate::{
     config::SETTINGS,
     repository::{PostgresRepository, Repository},
 };
 
-use self::http::APIv1;
+use self::{
+    account::AccountService, auth::AuthService, device::DeviceService, schema::SchemaService,
+};
+
+#[derive(Tags)]
+enum ApiTags {
+    /// Auth相关API
+    Auth,
+    /// 账号相关API(需要管理员权限)
+    Account,
+    /// 设备相关API
+    Device,
+    /// 数据模型相关API
+    Schema,
+}
+const fn default_page() -> usize {
+    1
+}
+const fn default_page_size() -> usize {
+    10
+}
 
 #[derive(Clone)]
-pub struct AppState<T: Repository + Clone = PostgresRepository> {
+pub struct AppState<T: Repository = PostgresRepository> {
     pub repo: T,
 }
 
@@ -37,8 +59,12 @@ pub async fn run() {
     let repo = PostgresRepository::new(conn);
     repo.initial_admin().await;
     let state = AppState { repo };
-    let api_service = OpenApiService::new(APIv1::default(), "NEOIOT Core", "v1.0")
-        .server(format!("http://{}/api", SETTINGS.endpoint.clone()));
+    let api_service = OpenApiService::new(
+        (AuthService, AccountService, DeviceService, SchemaService),
+        "NEOIOT Core",
+        "v1.0",
+    )
+    .server(format!("http://{}/api", SETTINGS.endpoint.clone()));
     let redoc = api_service.redoc();
     let swagger = api_service.swagger_ui();
     let rapidoc = api_service.rapidoc();

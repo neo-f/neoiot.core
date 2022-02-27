@@ -6,7 +6,7 @@ use poem_openapi::{
     ApiResponse, Enum, Object,
 };
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Account {
     pub id: String,
     /// 账户唯一邮箱
@@ -34,7 +34,7 @@ impl From<AccountModel> for Account {
     }
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct CreateAccount {
     /// 账户唯一邮箱
     pub email: Email,
@@ -47,7 +47,7 @@ pub struct CreateAccount {
     pub is_super: bool,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct UpdateAccount {
     /// 账户唯一邮箱
     pub email: Option<Email>,
@@ -57,7 +57,7 @@ pub struct UpdateAccount {
     pub password: Option<Password>,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Accounts {
     /// 数据列表
     pub results: Vec<Account>,
@@ -65,18 +65,18 @@ pub struct Accounts {
     pub total: usize,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Login {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
-pub struct Token {
+#[derive(Debug, Object, PartialEq)]
+pub struct TokenResponse {
     pub token: String,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct DeviceConnection {
     pub id: String,
     /// 所属设备原因
@@ -117,7 +117,7 @@ impl From<DeviceConnectionModel> for DeviceConnection {
     }
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct DeviceConnections {
     total: usize,
     results: Vec<DeviceConnection>,
@@ -138,14 +138,14 @@ pub struct DeviceModelWithRelated {
     pub schema: SchemaModel,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct DeviceWithLables {
     /// 设备ID
     pub id: String,
     /// 设备名称
     pub name: String,
     /// 设备标签列表
-    pub labels: Vec<Label>,
+    pub labels: Vec<String>,
     /// 数据模型
     pub schema: Schema,
     /// 设备是否激活
@@ -161,7 +161,7 @@ impl From<DeviceModelWithRelated> for DeviceWithLables {
         DeviceWithLables {
             id: obj.device.id,
             name: obj.device.name,
-            labels: obj.labels.into_iter().map(|x| x.into()).collect(),
+            labels: obj.labels.into_iter().map(|x| x.name).collect(),
             schema: obj.schema.into(),
             is_active: obj.device.is_active,
             is_online: obj.device.is_online,
@@ -170,7 +170,7 @@ impl From<DeviceModelWithRelated> for DeviceWithLables {
     }
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Device {
     /// 设备ID
     pub id: String,
@@ -198,7 +198,7 @@ impl From<DeviceModel> for Device {
     }
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct CreateDevice {
     /// 设备名称
     pub name: String,
@@ -210,7 +210,7 @@ pub struct CreateDevice {
     pub mqtt_password: String,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct UpdateDevice {
     /// 设备名称
     pub name: Option<String>,
@@ -222,7 +222,7 @@ pub struct UpdateDevice {
     pub schema_id: Option<String>,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Devices {
     /// 数据列表
     pub results: Vec<Device>,
@@ -236,25 +236,24 @@ const fn default_qos() -> u8 {
 const fn default_async() -> bool {
     true
 }
+const fn default_codec() -> PayloadCodec {
+    PayloadCodec::Plain
+}
 
-#[derive(Debug, Clone, PartialEq, Enum)]
+#[derive(Debug, PartialEq, Enum)]
 pub enum PayloadCodec {
     /// 不压缩
     Plain,
     /// Base64编码
     Base64,
 }
-impl Default for PayloadCodec {
-    fn default() -> Self {
-        PayloadCodec::Plain
-    }
-}
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct SendCommandToDevice {
     /// 指令名称
     pub command: String,
     /// 编码类型
+    #[oai(default = "default_codec")]
     pub codec: PayloadCodec,
     /// 负载信息
     pub payload: String,
@@ -273,7 +272,7 @@ pub struct SendCommandToDevice {
     pub qos: u8,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct SyncCommandResponse {
     /// 编码类型
     pub codec: PayloadCodec,
@@ -281,20 +280,22 @@ pub struct SyncCommandResponse {
     pub payload: String,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct AsyncCommandResponse {
     pub message_id: String,
 }
 
 #[derive(ApiResponse)]
 pub enum CommandResponse {
+    /// 同步模式下，设备端接收到指令后，会返回指令执行结果
     #[oai(status = "201")]
     _Sync(Json<SyncCommandResponse>),
+    /// 异步模式下，设备端接收到指令后，不会返回指令执行结果，只返回消息ID
     #[oai(status = "202")]
     Async(Json<AsyncCommandResponse>),
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Label {
     /// 设备ID
     pub id: String,
@@ -314,7 +315,7 @@ impl From<LabelModel> for Label {
     }
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Schema {
     pub id: String,
     /// 数据模型名称
@@ -338,7 +339,7 @@ pub struct SchemaModelWithRelated {
     pub fields: Vec<FieldModel>,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct SchemaWithFields {
     pub id: String,
     /// 数据模型名称
@@ -360,20 +361,20 @@ impl From<SchemaModelWithRelated> for SchemaWithFields {
     }
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct CreateSchema {
     /// 数据模型名称
     #[oai(validator(min_length = 3, max_length = 64))]
     pub name: String,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct UpdateSchema {
     /// 账户名称
     pub name: Option<String>,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Schemas {
     /// 数据列表
     pub results: Vec<Schema>,
@@ -381,7 +382,7 @@ pub struct Schemas {
     pub total: usize,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct Field {
     pub id: String,
     /// 字段唯一标识符
@@ -408,7 +409,7 @@ impl From<FieldModel> for Field {
     }
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct CreateField {
     /// 字段唯一标识符
     pub identifier: String,
@@ -420,7 +421,7 @@ pub struct CreateField {
     pub unit: Option<String>,
 }
 
-#[derive(Debug, Object, Clone, PartialEq)]
+#[derive(Debug, Object, PartialEq)]
 pub struct UpdateField {
     /// 字段唯一标识符
     pub identifier: Option<String>,

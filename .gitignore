@@ -1,5 +1,5 @@
 /target
-config/local.yaml
+config/local.toml
 .idea
 .vscode
 .DS_Store

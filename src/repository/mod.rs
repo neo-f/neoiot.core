@@ -5,13 +5,13 @@ use poem::async_trait;
 mod postgres;
 pub use postgres::PostgresRepository;
 
-use crate::io_schema::{self, SchemaModelWithRelated};
+use crate::oai_schema;
 
 #[async_trait]
 pub trait Repository: Send + Sync + 'static {
     ////////////////////////////// 账号相关//////////////////////////////////////////////////////////
     /// 创建账号
-    async fn create_account(&self, req: &io_schema::CreateAccount) -> Result<AccountModel>;
+    async fn create_account(&self, req: &oai_schema::CreateAccount) -> Result<AccountModel>;
     /// 获取一个账号信息
     async fn get_account(&self, account_id: &str) -> Result<AccountModel>;
     /// 获取一个账号信息(通过邮箱)
@@ -30,7 +30,7 @@ pub trait Repository: Send + Sync + 'static {
     async fn update_account(
         &self,
         account_id: &str,
-        req: &io_schema::UpdateAccount,
+        req: &oai_schema::UpdateAccount,
     ) -> Result<AccountModel>;
     /// 删除账号
     async fn delete_account(&self, account_id: &str) -> Result<()>;
@@ -43,7 +43,7 @@ pub trait Repository: Send + Sync + 'static {
         &self,
         account_id: &str,
         device_id: &str,
-    ) -> Result<io_schema::DeviceModelWithRelated>;
+    ) -> Result<oai_schema::DeviceModelWithRelated>;
     /// 获取设备列表
     async fn list_device(
         &self,
@@ -59,16 +59,16 @@ pub trait Repository: Send + Sync + 'static {
         &self,
         account_id: &str,
         device_id: &str,
-        req: &io_schema::UpdateDevice,
-    ) -> Result<io_schema::DeviceModelWithRelated>;
+        req: &oai_schema::UpdateDevice,
+    ) -> Result<oai_schema::DeviceModelWithRelated>;
     /// 删除设备
     async fn delete_device(&self, account_id: &str, device_id: &str) -> Result<()>;
     /// 创建设备
     async fn create_device(
         &self,
         account_id: &str,
-        req: &io_schema::CreateDevice,
-    ) -> Result<io_schema::DeviceModelWithRelated>;
+        req: &oai_schema::CreateDevice,
+    ) -> Result<oai_schema::DeviceModelWithRelated>;
     /// 获取设备的连接信息
     async fn list_device_connections(
         &self,
@@ -81,22 +81,22 @@ pub trait Repository: Send + Sync + 'static {
         &self,
         account_id: &str,
         device_id: &str,
-        req: &io_schema::SendCommandToDevice,
-    ) -> Result<io_schema::CommandResponse>;
+        req: &oai_schema::SendCommandToDevice,
+    ) -> Result<oai_schema::CommandResponse>;
 
     ////////////////////////////// 数据模型相关//////////////////////////////////////////////////////////
     /// 创建一个数据模型
     async fn create_schema(
         &self,
         account_id: &str,
-        schema: &io_schema::CreateSchema,
+        schema: &oai_schema::CreateSchema,
     ) -> Result<SchemaModel>;
     /// 获取一个数据模型
     async fn get_schema_with_related(
         &self,
         account_id: &str,
         schema_id: &str,
-    ) -> Result<SchemaModelWithRelated>;
+    ) -> Result<oai_schema::SchemaModelWithRelated>;
     async fn get_schema(&self, account_id: &str, schema_id: &str) -> Result<SchemaModel>;
     /// 获取数据模型列表
     async fn list_schema(
@@ -112,7 +112,7 @@ pub trait Repository: Send + Sync + 'static {
         &self,
         account_id: &str,
         schema_id: &str,
-        req: &io_schema::UpdateSchema,
+        req: &oai_schema::UpdateSchema,
     ) -> Result<SchemaModel>;
     /// 删除数据模型
     async fn delete_schema(&self, account_id: &str, schema_id: &str) -> Result<()>;
@@ -121,7 +121,7 @@ pub trait Repository: Send + Sync + 'static {
         &self,
         account_id: &str,
         schema_id: &str,
-        field: &io_schema::CreateField,
+        field: &oai_schema::CreateField,
     ) -> Result<FieldModel>;
     /// 查询一个数据模型的字段
     async fn get_field(
@@ -136,7 +136,7 @@ pub trait Repository: Send + Sync + 'static {
         account_id: &str,
         schema_id: &str,
         identifier: &str,
-        req: &io_schema::UpdateField,
+        req: &oai_schema::UpdateField,
     ) -> Result<FieldModel>;
     /// 删除数据模型的字段
     async fn delete_field(&self, account_id: &str, schema_id: &str, identifier: &str)

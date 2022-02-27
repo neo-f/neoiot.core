@@ -2,10 +2,11 @@
 extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
+mod auth;
 mod config;
 mod errors;
-mod io_schema;
 mod mqtt_client;
+mod oai_schema;
 mod repository;
 mod service;
 mod topics;
