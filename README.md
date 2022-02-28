@@ -1,3 +1,3 @@
 # neoiot.core
 
-just for fun
+WIP
