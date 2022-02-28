@@ -23,6 +23,7 @@ use entity::{prelude::*, sea_orm::ConnectOptions};
 use poem::async_trait;
 use poem_openapi::types::{Email, Password};
 use rand_core::OsRng;
+use serde_json::json;
 
 use super::Repository;
 
@@ -40,8 +41,7 @@ impl PostgresRepository {
         opt.max_connections(100)
             .min_connections(5)
             .connect_timeout(Duration::from_secs(8))
-            .idle_timeout(Duration::from_secs(8))
-            .sqlx_logging(true);
+            .idle_timeout(Duration::from_secs(8));
 
         let conn = Database::connect(opt).await.unwrap();
         Self { conn }
@@ -270,14 +270,13 @@ impl super::Repository for PostgresRepository {
             account_id: Set(account_id.to_string()),
             schema_id: Set(req.schema_id.clone()),
             name: Set(req.name.clone()),
-            label_version: Set(SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as i64),
+            label_version: Set(0),
             is_active: Set(true),
             is_online: Set(false),
             mqtt_username: Set(format!("{}/{}", &device_id, account_id)),
             mqtt_password: Set(req.mqtt_password.clone()),
+            acl_pubs: Set(json!([])),
+            acl_subs: Set(json!([])),
             is_super_device: Set(false),
             ..Default::default()
         };

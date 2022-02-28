@@ -45,6 +45,46 @@ impl Command {
         topic
     }
 }
+pub struct ACLRules {
+    account_id: String,
+    device_id: String,
+}
+impl ACLRules {
+    pub fn new(account_id: String, device_id: String) -> Self {
+        Self {
+            account_id,
+            device_id,
+        }
+    }
+    pub fn sub_command(&self) -> String {
+        // cmd/:account_id/:device_id/:command/:messageID/:ttl?
+        format!("cmd/{}/{}/+/+/+/#", self.account_id, self.device_id)
+    }
+    pub fn sub_tag_command(&self) -> String {
+        // tags_cmd/:account_id/:tag/:command/:messageID/:ttl?
+        format!("tag_cmd/{}/+/+/+/#", self.account_id)
+    }
+    pub fn sub_m2m(&self) -> String {
+        // m2m/:account_id/:receiver_device_id/:sender_device_id/:message_id
+        format!("m2m/{}/{}/+/+", self.account_id, self.device_id)
+    }
+    pub fn pub_m2m(&self) -> String {
+        // m2m/:account_id/:receiver_device_id/:sender_device_id/:message_id
+        format!("m2m/{}/+/{}/+", self.account_id, self.device_id)
+    }
+    pub fn pub_data_req(&self) -> String {
+        // data_request/:account_id/:device_id/:message_id
+        format!("data_req/{}/{}/+/+", self.account_id, self.device_id)
+    }
+}
+// func ACLRuleM2MPub(accountID, deviceID string) string {
+// 	return fmt.Sprintf("m2m/%s/+/%s/+", accountID, deviceID)
+// }
+
+// func ACLRuleM2MSub(username string) string {
+// 	// m2m/:account_id/:receiver_device_id/:sender_device_id/:message_id
+// 	return fmt.Sprintf("m2m/%s/+/+", username)
+// }
 
 #[derive(Debug, PartialEq)]
 pub struct Message {
@@ -133,9 +173,9 @@ mod tests {
                 ttl: Some(3600),
             })
         );
-        let topic = "cmd/test_account/test_device/test_command/test_message_id/3600/fake";
+        let topic = "cmd/test_account/test_device/test_command/sync/test_message_id/3600/fake";
         assert!(topic.parse::<Topics>().is_err(),);
-        let topic = "blablabla/test_account/test_device/test_command/test_message_id/3600";
+        let topic = "blablabla/test_account/test_device/async/test_command/test_message_id/3600";
         assert!(topic.parse::<Topics>().is_err(),);
     }
 }
