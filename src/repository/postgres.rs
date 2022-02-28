@@ -1,6 +1,7 @@
 use std::time::SystemTime;
 use std::{collections::HashSet, time::Duration};
 
+use crate::topics::ACLRules;
 use crate::{
     errors::NeoiotError,
     errors::Result,
@@ -265,6 +266,7 @@ impl super::Repository for PostgresRepository {
         req: &CreateDevice,
     ) -> Result<DeviceModelWithRelated> {
         let device_id = xid::new().to_string();
+        let acl = ACLRules::new(account_id.to_string(), device_id.clone());
         let new_device = devices::ActiveModel {
             id: Set(device_id.clone()),
             account_id: Set(account_id.to_string()),
@@ -275,8 +277,13 @@ impl super::Repository for PostgresRepository {
             is_online: Set(false),
             mqtt_username: Set(format!("{}/{}", &device_id, account_id)),
             mqtt_password: Set(req.mqtt_password.clone()),
-            acl_pubs: Set(json!([])),
-            acl_subs: Set(json!([])),
+            acl_pubs: Set(json!([
+                acl.pub_d2d(),
+                acl.pub_d2s(),
+                acl.pub_s2dr(),
+                acl.pub_metrics(),
+            ])),
+            acl_subs: Set(json!([acl.sub_s2d(), acl.sub_s2ds(), acl.sub_d2d()])),
             is_super_device: Set(false),
             ..Default::default()
         };
@@ -324,9 +331,9 @@ impl super::Repository for PostgresRepository {
     ) -> Result<String> {
         let _device = self.get_device(account_id, device_id).await?;
         let command =
-            topics::Command::new(account_id, device_id, &req.command, req.is_sync, req.ttl);
+            topics::ServerToDevice::new(account_id, device_id, &req.command, req.is_sync, req.ttl);
         let message_id = command.message_id.clone();
-        Message::new(Topics::Command(command), req.payload.clone())
+        Message::new(Topics::S2D(command), req.payload.clone())
             .publish(req.qos)
             .await?;
         Ok(message_id)

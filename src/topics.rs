@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Command {
+pub struct ServerToDevice {
     pub message_id: String,
     pub account_id: String,
     pub device_id: String,
@@ -15,7 +15,7 @@ pub struct Command {
     pub ttl: Option<usize>,
 }
 
-impl Command {
+impl ServerToDevice {
     pub fn new(
         account_id: &str,
         device_id: &str,
@@ -36,7 +36,7 @@ impl Command {
     pub fn topic(&self) -> String {
         let mode = if self.is_sync { "sync" } else { "async" };
         let topic = format!(
-            "cmd/{}/{}/{}/{}/{}",
+            "s2d/{}/{}/{}/{}/{}",
             self.account_id, self.device_id, self.command, mode, self.message_id,
         );
         if let Some(ttl) = self.ttl {
@@ -45,10 +45,12 @@ impl Command {
         topic
     }
 }
+
 pub struct ACLRules {
     account_id: String,
     device_id: String,
 }
+
 impl ACLRules {
     pub fn new(account_id: String, device_id: String) -> Self {
         Self {
@@ -56,35 +58,59 @@ impl ACLRules {
             device_id,
         }
     }
-    pub fn sub_command(&self) -> String {
-        // cmd/:account_id/:device_id/:command/:messageID/:ttl?
-        format!("cmd/{}/{}/+/+/+/#", self.account_id, self.device_id)
+    pub fn sub_s2d(&self) -> String {
+        // server to device
+        format!(
+            "s2d/{account_id}/{device_id}/+/+/+/#",
+            account_id = self.account_id,
+            device_id = self.device_id
+        )
     }
-    pub fn sub_tag_command(&self) -> String {
-        // tags_cmd/:account_id/:tag/:command/:messageID/:ttl?
-        format!("tag_cmd/{}/+/+/+/#", self.account_id)
+    pub fn sub_s2ds(&self) -> String {
+        // server to devices(lable)
+        format!("s2ds/{account_id}/+/+/+/#", account_id = self.account_id)
     }
-    pub fn sub_m2m(&self) -> String {
-        // m2m/:account_id/:receiver_device_id/:sender_device_id/:message_id
-        format!("m2m/{}/{}/+/+", self.account_id, self.device_id)
+    pub fn sub_d2d(&self) -> String {
+        // device to device
+        format!(
+            "d2d/{account_id}/{receiver_id}/+/+",
+            account_id = self.account_id,
+            receiver_id = self.device_id
+        )
     }
-    pub fn pub_m2m(&self) -> String {
-        // m2m/:account_id/:receiver_device_id/:sender_device_id/:message_id
-        format!("m2m/{}/+/{}/+", self.account_id, self.device_id)
+    pub fn pub_s2dr(&self) -> String {
+        // server to device response
+        format!(
+            "s2dr/{account_id}/{device_id}/+/+/+/#",
+            account_id = self.account_id,
+            device_id = self.device_id
+        )
     }
-    pub fn pub_data_req(&self) -> String {
-        // data_request/:account_id/:device_id/:message_id
-        format!("data_req/{}/{}/+/+", self.account_id, self.device_id)
+    pub fn pub_d2d(&self) -> String {
+        // device to device
+        format!(
+            "d2d/{account_id}/+/{sender_id}/+",
+            account_id = self.account_id,
+            sender_id = self.device_id
+        )
+    }
+    pub fn pub_d2s(&self) -> String {
+        // device to server
+        format!(
+            "d2s/{account_id}/{device_id}/+/+",
+            account_id = self.account_id,
+            device_id = self.device_id
+        )
+    }
+
+    pub fn pub_metrics(&self) -> String {
+        format!(
+            "metrics/{account_id}/{device_id}/+",
+            account_id = self.account_id,
+            device_id = self.device_id
+        )
     }
 }
-// func ACLRuleM2MPub(accountID, deviceID string) string {
-// 	return fmt.Sprintf("m2m/%s/+/%s/+", accountID, deviceID)
-// }
-
-// func ACLRuleM2MSub(username string) string {
-// 	// m2m/:account_id/:receiver_device_id/:sender_device_id/:message_id
-// 	return fmt.Sprintf("m2m/%s/+/+", username)
-// }
 
 #[derive(Debug, PartialEq)]
 pub struct Message {
@@ -103,12 +129,13 @@ impl Message {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Topics {
-    Command(Command),
+    S2D(ServerToDevice),
 }
+
 impl Topics {
     fn topic(&self) -> String {
         match self {
-            Topics::Command(cmd) => cmd.topic(),
+            Topics::S2D(cmd) => cmd.topic(),
         }
     }
 }
@@ -118,18 +145,18 @@ impl FromStr for Topics {
     fn from_str(topic: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = topic.split('/').collect();
         let message = match &parts[..] {
-            // cmd/:account_id/:device_id/:command/:mode/:messageID
-            ["cmd", account_id, device_id, command, mode, message_id] => Topics::Command(Command {
-                message_id: message_id.to_string(),
-                account_id: account_id.to_string(),
-                device_id: device_id.to_string(),
-                command: command.to_string(),
-                is_sync: *mode == "sync",
-                ttl: None,
-            }),
-            // cmd/:account_id/:device_id/:command/:mode/:messageID/:ttl
-            ["cmd", account_id, device_id, command, mode, message_id, ttl] => {
-                Topics::Command(Command {
+            ["s2d", account_id, device_id, command, mode, message_id] => {
+                Topics::S2D(ServerToDevice {
+                    message_id: message_id.to_string(),
+                    account_id: account_id.to_string(),
+                    device_id: device_id.to_string(),
+                    command: command.to_string(),
+                    is_sync: *mode == "sync",
+                    ttl: None,
+                })
+            }
+            ["s2d", account_id, device_id, command, mode, message_id, ttl] => {
+                Topics::S2D(ServerToDevice {
                     message_id: message_id.to_string(),
                     account_id: account_id.to_string(),
                     device_id: device_id.to_string(),
@@ -149,10 +176,10 @@ mod tests {
 
     #[test]
     fn test_topic() {
-        let topic = "cmd/test_account/test_device/test_command/sync/test_message_id";
+        let topic = "s2d/test_account/test_device/test_command/sync/test_message_id";
         assert_eq!(
             topic.parse::<Topics>().unwrap(),
-            Topics::Command(Command {
+            Topics::S2D(ServerToDevice {
                 message_id: "test_message_id".to_string(),
                 account_id: "test_account".to_string(),
                 device_id: "test_device".to_string(),
@@ -161,10 +188,10 @@ mod tests {
                 ttl: None,
             })
         );
-        let topic = "cmd/test_account/test_device/test_command/async/test_message_id/3600";
+        let topic = "s2d/test_account/test_device/test_command/async/test_message_id/3600";
         assert_eq!(
             topic.parse::<Topics>().unwrap(),
-            Topics::Command(Command {
+            Topics::S2D(ServerToDevice {
                 message_id: "test_message_id".to_string(),
                 account_id: "test_account".to_string(),
                 device_id: "test_device".to_string(),
