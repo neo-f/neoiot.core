@@ -8,8 +8,8 @@ members = [".","entity", "migration"]
 
 [dependencies]
 tokio = { version = "1.17.0", features = ["rt-multi-thread", "macros"] }
-poem = { version = "1.3.5", features = ["compression", "anyhow"] }
-poem-openapi = { version = "1.3.5", features = [
+poem = { version = "1.3.8", features = ["compression", "anyhow"] }
+poem-openapi = { version = "1.3.8", features = [
   "chrono",
   "swagger-ui",
   "redoc",
