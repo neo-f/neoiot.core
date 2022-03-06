@@ -45,8 +45,8 @@ pub struct AppState<R: Repository = PostgresRepository, C: Cache = RedisCache> {
 }
 
 pub async fn run() {
-    let repo = PostgresRepository::new(SETTINGS.postgres_url.clone()).await;
-    let cache = RedisCache::new(SETTINGS.redis_url.clone()).await;
+    let repo = PostgresRepository::new(SETTINGS.core.postgres_dsn.clone()).await;
+    let cache = RedisCache::new(SETTINGS.core.redis_dsn.clone()).await;
     repo.initial_admin().await;
     let state = AppState { repo, cache };
     let api_service = OpenApiService::new(
@@ -59,8 +59,7 @@ pub async fn run() {
         ),
         "NEOIOT Core",
         "v1.0",
-    )
-    .server(format!("http://{}/api", SETTINGS.endpoint.clone()));
+    );
     let redoc = api_service.redoc();
     let swagger = api_service.swagger_ui();
     let rapidoc = api_service.rapidoc();
@@ -72,7 +71,7 @@ pub async fn run() {
             middleware::TrailingSlash::Trim,
         ))
         .with(middleware::Compression::default());
-    Server::new(TcpListener::bind(SETTINGS.endpoint.as_str()))
+    Server::new(TcpListener::bind(SETTINGS.core.endpoint.as_str()))
         .run(
             Route::new()
                 .nest("/api", api_service)

@@ -27,7 +27,7 @@ impl AuthService {
             return Err(NeoiotError::AuthenticateError.into());
         }
         let claims = Claims::create(Duration::from_days(1)).with_subject(account.id);
-        let key = HS256Key::from_bytes(SETTINGS.secret.as_bytes());
+        let key = HS256Key::from_bytes(SETTINGS.core.secret.as_bytes());
         let token = key.authenticate(claims)?;
         state.repo.after_account_logined(&data.email).await?;
         Ok(Json(oai_schema::TokenResponse { token }))

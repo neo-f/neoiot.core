@@ -208,6 +208,7 @@ impl FromStr for Topics {
         Ok(message)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

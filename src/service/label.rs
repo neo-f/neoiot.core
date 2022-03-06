@@ -41,6 +41,7 @@ impl LabelService {
             .await?;
         Ok(Json(label.into()))
     }
+
     /// 删除标签
     #[oai(path = "/:label_id", method = "delete")]
     async fn delete_label(
@@ -52,6 +53,7 @@ impl LabelService {
         state.repo.delete_label(&account.0, &label_id).await?;
         Ok(())
     }
+
     /// 向包含标签的设备批量发送指令
     #[oai(path = "/:label_id/command", method = "post")]
     async fn send_command_to_deivce(
