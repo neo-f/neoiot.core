@@ -35,6 +35,20 @@ pub trait Repository: Send + Sync + 'static {
     /// 删除账号
     async fn delete_account(&self, account_id: &str) -> Result<()>;
 
+    async fn list_labels(&self, account_id: &str, q: Option<String>) -> Result<Vec<LabelModel>>;
+    async fn get_label(&self, account_id: &str, label_id: &str) -> Result<LabelModel>;
+    async fn update_label(
+        &self,
+        account_id: &str,
+        label_id: &str,
+        req: &oai_schema::UpdateLabel,
+    ) -> Result<LabelModel>;
+    async fn create_label(
+        &self,
+        account_id: &str,
+        req: &oai_schema::CreateLabel,
+    ) -> Result<LabelModel>;
+    async fn delete_label(&self, account_id: &str, label_id: &str) -> Result<()>;
     ////////////////////////////// 设备相关//////////////////////////////////////////////////////////
     /// 获取一条设备信息
     async fn get_device(&self, account_id: &str, device_id: &str) -> Result<DeviceModel>;
@@ -47,7 +61,7 @@ pub trait Repository: Send + Sync + 'static {
     /// 获取设备列表
     async fn list_device(
         &self,
-        account_id: Option<&str>,
+        account_id: &str,
         page: usize,
         page_size: usize,
         id_in: Option<Vec<String>>,
@@ -82,6 +96,13 @@ pub trait Repository: Send + Sync + 'static {
         account_id: &str,
         device_id: &str,
         req: &oai_schema::SendCommandToDevice,
+    ) -> Result<String>;
+
+    async fn send_command_to_label(
+        &self,
+        account_id: &str,
+        label_id: &str,
+        req: &oai_schema::SendCommandToDeviceBatch,
     ) -> Result<String>;
 
     ////////////////////////////// 数据模型相关//////////////////////////////////////////////////////////

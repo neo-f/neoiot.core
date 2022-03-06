@@ -1,17 +1,17 @@
 use std::time::SystemTime;
 use std::{collections::HashSet, time::Duration};
 
-use crate::topics::ACLRules;
 use crate::{
     errors::NeoiotError,
     errors::Result,
     oai_schema::{
-        CreateAccount, CreateDevice, CreateField, CreateSchema, DeviceModelWithRelated,
-        SchemaModelWithRelated, SendCommandToDevice, UpdateAccount, UpdateDevice, UpdateField,
-        UpdateSchema,
+        CreateAccount, CreateDevice, CreateField, CreateLabel, CreateSchema,
+        DeviceModelWithRelated, SchemaModelWithRelated, SendCommandToDevice, UpdateAccount,
+        UpdateDevice, UpdateField, UpdateLabel, UpdateSchema,
     },
     topics::{self, Message, Topics},
 };
+use crate::{oai_schema::SendCommandToDeviceBatch, topics::ACLRules};
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use chrono::Local;
@@ -175,22 +175,19 @@ impl super::Repository for PostgresRepository {
 
     async fn list_device(
         &self,
-        account_id: Option<&str>,
+        account_id: &str,
         page: usize,
         page_size: usize,
         id_in: Option<Vec<String>>,
         labels_in: Option<Vec<String>>,
         q: Option<String>,
     ) -> Result<(Vec<DeviceModel>, usize)> {
-        let mut stmt = DeviceEntity::find();
+        let mut stmt = DeviceEntity::find().filter(devices::Column::AccountId.eq(account_id));
         if let Some(id_in) = id_in {
             stmt = stmt.filter(devices::Column::Id.is_in(id_in));
         }
         if let Some(q) = q {
             stmt = stmt.filter(devices::Column::Name.starts_with(&q));
-        }
-        if let Some(account_id) = account_id {
-            stmt = stmt.filter(devices::Column::AccountId.eq(account_id));
         }
         if let Some(labels) = labels_in {
             stmt = stmt
@@ -215,26 +212,33 @@ impl super::Repository for PostgresRepository {
         let device_with_labels = self.get_device_with_labels(account_id, device_id).await?;
         let mut device: devices::ActiveModel = device_with_labels.device.into();
         //1. change device tags
-        if let Some(new_labels) = &req.labels {
-            let old_labels = device_with_labels
+        if let Some(new_label_ids) = &req.label_ids {
+            let old_label_ids = device_with_labels
                 .labels
                 .iter()
-                .map(|l| l.name.clone())
+                .map(|l| l.id.clone())
                 .collect::<HashSet<_>>();
-            let new_labels = new_labels.iter().cloned().collect::<HashSet<_>>();
-            if old_labels != new_labels {
-                LabelEntity::delete_many()
-                    .filter(labels::Column::DeviceId.eq(device_id))
-                    .exec(&self.conn)
-                    .await?;
-                LabelEntity::insert_many(new_labels.into_iter().map(|l| labels::ActiveModel {
-                    id: Set(xid::new().to_string()),
-                    device_id: Set(device_id.to_string()),
-                    name: Set(l),
-                    ..Default::default()
+            let new_label_ids = new_label_ids.iter().cloned().collect::<HashSet<_>>();
+            if old_label_ids != new_label_ids {
+                let need_add = new_label_ids.difference(&old_label_ids);
+                let need_del = old_label_ids.difference(&new_label_ids);
+
+                LabelDeviceRelationEntity::insert_many(need_add.map(|id| {
+                    LabelDeviceRelationActiveModel {
+                        label_id: Set(id.to_string()),
+                        device_id: Set(device_id.to_string()),
+                        ..Default::default()
+                    }
                 }))
                 .exec(&self.conn)
                 .await?;
+                LabelDeviceRelationEntity::delete_many()
+                    .filter(LabelDeviceRelationColumn::DeviceId.eq(device_id))
+                    .filter(
+                        LabelDeviceRelationColumn::LabelId.is_in(need_del.map(|id| id.to_string())),
+                    )
+                    .exec(&self.conn)
+                    .await?;
                 device.label_version = Set(SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap()
@@ -283,26 +287,20 @@ impl super::Repository for PostgresRepository {
                 acl.pub_s2dr(),
                 acl.pub_metrics(),
             ])),
-            acl_subs: Set(json!([acl.sub_s2d(), acl.sub_s2ds(), acl.sub_d2d()])),
+            acl_subs: Set(json!([acl.sub_s2d(), acl.sub_s2l(), acl.sub_d2d()])),
             is_super_device: Set(false),
             ..Default::default()
         };
-
-        let new_labels = req
-            .labels
-            .clone()
-            .into_iter()
-            .map(|l| labels::ActiveModel {
-                id: Set(xid::new().to_string()),
-                device_id: Set(device_id.clone()),
-                name: Set(l),
-                ..Default::default()
-            })
-            .collect::<Vec<_>>();
         new_device.insert(&self.conn).await?;
-        LabelEntity::insert_many(new_labels)
-            .exec(&self.conn)
-            .await?;
+        LabelDeviceRelationEntity::insert_many(req.label_ids.iter().map(|id| {
+            LabelDeviceRelationActiveModel {
+                label_id: Set(id.to_string()),
+                device_id: Set(device_id.to_string()),
+                ..Default::default()
+            }
+        }))
+        .exec(&self.conn)
+        .await?;
         self.get_device_with_labels(account_id, &device_id).await
     }
 
@@ -338,6 +336,75 @@ impl super::Repository for PostgresRepository {
             .await?;
         Ok(message_id)
     }
+
+    async fn list_labels(&self, account_id: &str, q: Option<String>) -> Result<Vec<LabelModel>> {
+        let mut stmt = LabelEntity::find().filter(labels::Column::AccountId.eq(account_id));
+        if let Some(q) = q {
+            stmt = stmt.filter(labels::Column::Name.starts_with(&q));
+        }
+        let labels = stmt
+            .order_by_asc(labels::Column::Id)
+            .all(&self.conn)
+            .await?;
+        Ok(labels)
+    }
+
+    async fn create_label(&self, account_id: &str, req: &CreateLabel) -> Result<LabelModel> {
+        let label = LabelActiveModel {
+            id: Set(xid::new().to_string()),
+            account_id: Set(account_id.to_string()),
+            name: Set(req.name.clone()),
+            ..Default::default()
+        };
+        let label = label.insert(&self.conn).await?;
+        Ok(label)
+    }
+
+    async fn update_label(
+        &self,
+        account_id: &str,
+        label_id: &str,
+        req: &UpdateLabel,
+    ) -> Result<LabelModel> {
+        let label = self.get_label(account_id, label_id).await?;
+        let mut label: LabelActiveModel = label.into();
+        label.name = Set(req.name.clone());
+        label.update(&self.conn).await?;
+        self.get_label(account_id, label_id).await
+    }
+    async fn get_label(&self, account_id: &str, label_id: &str) -> Result<LabelModel> {
+        let label = LabelEntity::find()
+            .filter(labels::Column::AccountId.eq(account_id))
+            .filter(labels::Column::Id.eq(label_id))
+            .one(&self.conn)
+            .await?
+            .ok_or_else(|| NeoiotError::ObjectNotFound("label".to_string()))?;
+        Ok(label)
+    }
+    async fn delete_label(&self, account_id: &str, label_id: &str) -> Result<()> {
+        let label = self.get_label(account_id, label_id).await?;
+        label.delete(&self.conn).await?;
+        Ok(())
+    }
+    async fn send_command_to_label(
+        &self,
+        account_id: &str,
+        label_id: &str,
+        req: &SendCommandToDeviceBatch,
+    ) -> Result<String> {
+        let label = LabelEntity::find_by_id(label_id.to_string())
+            .one(&self.conn)
+            .await?
+            .ok_or_else(|| NeoiotError::ObjectNotFound("label".to_string()))?;
+        let command =
+            topics::ServerToDeviceBatch::new(account_id, &label.name, &req.command, req.ttl);
+        let message_id = command.message_id.clone();
+        Message::new(Topics::S2L(command), req.payload.clone())
+            .publish(req.qos)
+            .await?;
+        Ok(message_id)
+    }
+
     async fn create_schema(&self, account_id: &str, schema: &CreateSchema) -> Result<SchemaModel> {
         let new_schema = SchemaActiveModel {
             id: Set(xid::new().to_string()),

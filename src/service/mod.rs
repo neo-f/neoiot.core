@@ -1,6 +1,7 @@
 mod account;
 mod auth;
 mod device;
+mod label;
 mod schema;
 
 use poem::{listener::TcpListener, middleware, EndpointExt, Route, Server};
@@ -13,7 +14,8 @@ use crate::{
 };
 
 use self::{
-    account::AccountService, auth::AuthService, device::DeviceService, schema::SchemaService,
+    account::AccountService, auth::AuthService, device::DeviceService, label::LabelService,
+    schema::SchemaService,
 };
 
 #[derive(Tags)]
@@ -22,6 +24,8 @@ enum ApiTags {
     Auth,
     /// 账号相关API(需要管理员权限)
     Account,
+    /// 标签相关API
+    Label,
     /// 设备相关API
     Device,
     /// 数据模型相关API
@@ -46,7 +50,13 @@ pub async fn run() {
     repo.initial_admin().await;
     let state = AppState { repo, cache };
     let api_service = OpenApiService::new(
-        (AuthService, AccountService, DeviceService, SchemaService),
+        (
+            AuthService,
+            AccountService,
+            LabelService,
+            DeviceService,
+            SchemaService,
+        ),
         "NEOIOT Core",
         "v1.0",
     )

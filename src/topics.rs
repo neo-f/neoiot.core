@@ -46,6 +46,42 @@ impl ServerToDevice {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerToDeviceBatch {
+    pub message_id: String,
+    pub account_id: String,
+    pub label: String,
+    pub command: String,
+    pub ttl: Option<usize>,
+}
+
+impl ServerToDeviceBatch {
+    pub fn new(account_id: &str, label: &str, command: &str, ttl: Option<usize>) -> Self {
+        let message_id = xid::new().to_string();
+        Self {
+            message_id,
+            account_id: account_id.to_string(),
+            label: label.to_string(),
+            command: command.to_string(),
+            ttl,
+        }
+    }
+
+    pub fn topic(&self) -> String {
+        let topic = format!(
+            "s2l/{account_id}/{label}/{command}/{message_id}/{}",
+            account_id = self.account_id,
+            label = self.label,
+            command = self.command,
+            message_id = self.message_id,
+        );
+        if let Some(ttl) = self.ttl {
+            return format!("{}/{}", topic, ttl);
+        }
+        topic
+    }
+}
+
 pub struct ACLRules {
     account_id: String,
     device_id: String,
@@ -66,9 +102,9 @@ impl ACLRules {
             device_id = self.device_id
         )
     }
-    pub fn sub_s2ds(&self) -> String {
-        // server to devices(lable)
-        format!("s2ds/{account_id}/+/+/+/#", account_id = self.account_id)
+    pub fn sub_s2l(&self) -> String {
+        // server to lable
+        format!("s2l/{account_id}/+/+/+/#", account_id = self.account_id)
     }
     pub fn sub_d2d(&self) -> String {
         // device to device
@@ -130,12 +166,14 @@ impl Message {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Topics {
     S2D(ServerToDevice),
+    S2L(ServerToDeviceBatch),
 }
 
 impl Topics {
     fn topic(&self) -> String {
         match self {
             Topics::S2D(cmd) => cmd.topic(),
+            Topics::S2L(cmd) => cmd.topic(),
         }
     }
 }

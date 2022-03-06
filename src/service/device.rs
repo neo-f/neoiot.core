@@ -45,7 +45,7 @@ impl DeviceService {
         let (devices, total) = state
             .repo
             .list_device(
-                Some(&account.0),
+                &account.0,
                 page.0,
                 page_size.0,
                 id_in.clone(),

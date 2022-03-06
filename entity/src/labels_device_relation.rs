@@ -3,15 +3,11 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "command_request_logs")]
+#[sea_orm(table_name = "labels_device_relation")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false)]
-    pub message_id: String,
-    pub topic: String,
-    pub command: String,
-    pub mode: String,
-    pub body: String,
-    pub created_at: DateTimeWithTimeZone,
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    pub label_id: String,
     pub device_id: String,
 }
 
@@ -25,8 +21,14 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Devices,
-    #[sea_orm(has_many = "super::command_response_logs::Entity")]
-    CommandResponseLogs,
+    #[sea_orm(
+        belongs_to = "super::labels::Entity",
+        from = "Column::LabelId",
+        to = "super::labels::Column::Id",
+        on_update = "NoAction",
+        on_delete = "Cascade"
+    )]
+    Labels,
 }
 
 impl Related<super::devices::Entity> for Entity {
@@ -35,9 +37,9 @@ impl Related<super::devices::Entity> for Entity {
     }
 }
 
-impl Related<super::command_response_logs::Entity> for Entity {
+impl Related<super::labels::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::CommandResponseLogs.def()
+        Relation::Labels.def()
     }
 }
 

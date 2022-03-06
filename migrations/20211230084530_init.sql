@@ -91,14 +91,27 @@ CREATE TRIGGER "on_devices_update" BEFORE UPDATE ON "devices" FOR EACH ROW EXECU
 -- ----------------------------
 CREATE TABLE "labels" (
   "id" varchar NOT NULL,
+  "account_id" varchar NOT NULL,
   "name" varchar NOT NULL,
   "created_at" timestamptz(6) NOT NULL DEFAULT now(),
   "updated_at" timestamptz(6),
-  "device_id" varchar NOT NULL,
   CONSTRAINT "labels_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "fk_device_id" FOREIGN KEY ("device_id") REFERENCES "devices" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
+  CONSTRAINT "fk_account_id" FOREIGN KEY ("account_id") REFERENCES "accounts" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
 );
 CREATE TRIGGER "on_labels_update" BEFORE UPDATE ON "labels" FOR EACH ROW EXECUTE PROCEDURE "trigger_set_timestamp"();
+
+-- ----------------------------
+-- Table structure for labels_device_relation
+-- ----------------------------
+CREATE TABLE "labels_device_relation" (
+  "id" SERIAL8 NOT NULL,
+  "label_id" varchar NOT NULL,
+  "device_id" varchar NOT NULL,
+  CONSTRAINT "labels_device_relation_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "fk_label_id" FOREIGN KEY ("label_id") REFERENCES "labels" ("id") ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT "fk_device_id" FOREIGN KEY ("device_id") REFERENCES "devices" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
+);
+CREATE TRIGGER "on_labels_device_relation_update" BEFORE UPDATE ON "labels_device_relation" FOR EACH ROW EXECUTE PROCEDURE "trigger_set_timestamp"();
 
 -- ----------------------------
 -- Table structure for command_request_logs

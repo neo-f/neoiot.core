@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use entity::{fields, prelude::*};
+use entity::{fields, prelude::*, sea_orm::prelude::DateTimeWithTimeZone};
 use poem_openapi::{
     payload::Json,
     types::{Email, Password},
@@ -205,7 +205,7 @@ pub struct CreateDevice {
     /// 数据模型ID
     pub schema_id: String,
     /// 标签列表
-    pub labels: Vec<String>,
+    pub label_ids: Vec<String>,
     /// 设备MQTT连接密码
     pub mqtt_password: String,
 }
@@ -217,7 +217,7 @@ pub struct UpdateDevice {
     /// 设备激活状态ID
     pub is_active: Option<bool>,
     /// 设备标签
-    pub labels: Option<Vec<String>>,
+    pub label_ids: Option<Vec<String>>,
     /// 数据模型
     pub schema_id: Option<String>,
 }
@@ -282,6 +282,25 @@ pub struct SendCommandToDevice {
 }
 
 #[derive(Debug, Object, PartialEq)]
+pub struct SendCommandToDeviceBatch {
+    /// 指令名称
+    pub command: String,
+    /// 编码类型
+    #[oai(default = "default_codec")]
+    pub codec: PayloadCodec,
+    /// 负载信息
+    pub payload: String,
+    /// 指令过期时间（秒）
+    pub ttl: Option<usize>,
+    /// 指令QOS
+    #[oai(
+        default = "default_qos",
+        validator(maximum(value = "2"), minimum(value = "0"))
+    )]
+    pub qos: u8,
+}
+
+#[derive(Debug, Object, PartialEq)]
 pub struct SyncCommandResponse {
     /// 设备响应
     pub response: String,
@@ -328,6 +347,18 @@ impl From<LabelModel> for Label {
             created_at: obj.created_at.into(),
         }
     }
+}
+#[derive(Debug, Object, PartialEq)]
+pub struct Labels {
+    pub results: Vec<Label>,
+}
+#[derive(Debug, Object, PartialEq)]
+pub struct UpdateLabel {
+    pub name: String,
+}
+#[derive(Debug, Object, PartialEq)]
+pub struct CreateLabel {
+    pub name: String,
 }
 
 #[derive(Debug, Object, PartialEq)]
