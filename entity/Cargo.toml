@@ -9,11 +9,11 @@ name = "entity"
 path = "src/mod.rs"
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-sea-orm = { version = "0.6.0", features = [
+serde = { version = "1.0.136", features = ["derive"] }
+sea-orm = { version = "0.7.1", features = [
   "sqlx-postgres",
   "runtime-tokio-rustls",
   "macros",
 ], default-features = false }
 
-poem-openapi = { version = "1.3.5" }
+poem-openapi = "1.3.19"
