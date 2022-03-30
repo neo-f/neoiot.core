@@ -11,8 +11,8 @@ pub struct Model {
     pub schema_id: String,
     pub identifier: String,
     pub data_type: DataType,
-    pub comment: String,
-    pub unit: String,
+    pub comment: Option<String>,
+    pub unit: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,
 }

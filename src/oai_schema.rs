@@ -2,7 +2,7 @@ use chrono::{DateTime, Local};
 use entity::{fields, prelude::*, sea_orm::prelude::DateTimeWithTimeZone};
 use poem_openapi::{
     payload::Json,
-    types::{Email, Password},
+    types::{Email, MaybeUndefined, Password},
     ApiResponse, Enum, Object,
 };
 
@@ -436,9 +436,9 @@ pub struct Field {
     // 数据类型
     pub data_type: fields::DataType,
     // 备注信息
-    pub comment: String,
+    pub comment: Option<String>,
     // 单位
-    pub unit: String,
+    pub unit: Option<String>,
     /// 字段创建时间
     pub created_at: DateTime<Local>,
 }
@@ -474,7 +474,7 @@ pub struct UpdateField {
     // 数据类型
     pub data_type: Option<fields::DataType>,
     // 备注信息
-    pub comment: Option<String>,
+    pub comment: MaybeUndefined<String>,
     // 单位
-    pub unit: Option<String>,
+    pub unit: MaybeUndefined<String>,
 }

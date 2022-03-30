@@ -22,7 +22,7 @@ use entity::sea_orm::{
 use entity::{accounts, device_connections, devices, fields, labels, schemas};
 use entity::{prelude::*, sea_orm::ConnectOptions};
 use poem::async_trait;
-use poem_openapi::types::{Email, Password};
+use poem_openapi::types::{Email, MaybeUndefined, Password};
 use rand_core::OsRng;
 use serde_json::json;
 
@@ -143,6 +143,58 @@ impl super::Repository for PostgresRepository {
         Ok(())
     }
 
+    async fn list_labels(&self, account_id: &str, q: Option<String>) -> Result<Vec<LabelModel>> {
+        let mut stmt = LabelEntity::find().filter(labels::Column::AccountId.eq(account_id));
+        if let Some(q) = q {
+            stmt = stmt.filter(labels::Column::Name.starts_with(&q));
+        }
+        let labels = stmt
+            .order_by_asc(labels::Column::Id)
+            .all(&self.conn)
+            .await?;
+        Ok(labels)
+    }
+
+    async fn get_label(&self, account_id: &str, label_id: &str) -> Result<LabelModel> {
+        let label = LabelEntity::find()
+            .filter(labels::Column::AccountId.eq(account_id))
+            .filter(labels::Column::Id.eq(label_id))
+            .one(&self.conn)
+            .await?
+            .ok_or_else(|| NeoiotError::ObjectNotFound("label".to_string()))?;
+        Ok(label)
+    }
+
+    async fn update_label(
+        &self,
+        account_id: &str,
+        label_id: &str,
+        req: &UpdateLabel,
+    ) -> Result<LabelModel> {
+        let label = self.get_label(account_id, label_id).await?;
+        let mut label: LabelActiveModel = label.into();
+        label.name = Set(req.name.clone());
+        label.update(&self.conn).await?;
+        self.get_label(account_id, label_id).await
+    }
+
+    async fn create_label(&self, account_id: &str, req: &CreateLabel) -> Result<LabelModel> {
+        let label = LabelActiveModel {
+            id: Set(xid::new().to_string()),
+            account_id: Set(account_id.to_string()),
+            name: Set(req.name.clone()),
+            ..Default::default()
+        };
+        let label = label.insert(&self.conn).await?;
+        Ok(label)
+    }
+
+    async fn delete_label(&self, account_id: &str, label_id: &str) -> Result<()> {
+        let label = self.get_label(account_id, label_id).await?;
+        label.delete(&self.conn).await?;
+        Ok(())
+    }
+
     async fn get_device(&self, account_id: &str, device_id: &str) -> Result<DeviceModel> {
         let device = DeviceEntity::find()
             .filter(devices::Column::Id.eq(device_id))
@@ -172,7 +224,6 @@ impl super::Repository for PostgresRepository {
             schema: schema.unwrap(),
         })
     }
-
     async fn list_device(
         &self,
         account_id: &str,
@@ -303,7 +354,6 @@ impl super::Repository for PostgresRepository {
         .await?;
         self.get_device_with_labels(account_id, &device_id).await
     }
-
     async fn list_device_connections(
         &self,
         account_id: &str,
@@ -335,56 +385,6 @@ impl super::Repository for PostgresRepository {
             .publish(req.qos)
             .await?;
         Ok(message_id)
-    }
-
-    async fn list_labels(&self, account_id: &str, q: Option<String>) -> Result<Vec<LabelModel>> {
-        let mut stmt = LabelEntity::find().filter(labels::Column::AccountId.eq(account_id));
-        if let Some(q) = q {
-            stmt = stmt.filter(labels::Column::Name.starts_with(&q));
-        }
-        let labels = stmt
-            .order_by_asc(labels::Column::Id)
-            .all(&self.conn)
-            .await?;
-        Ok(labels)
-    }
-
-    async fn create_label(&self, account_id: &str, req: &CreateLabel) -> Result<LabelModel> {
-        let label = LabelActiveModel {
-            id: Set(xid::new().to_string()),
-            account_id: Set(account_id.to_string()),
-            name: Set(req.name.clone()),
-            ..Default::default()
-        };
-        let label = label.insert(&self.conn).await?;
-        Ok(label)
-    }
-
-    async fn update_label(
-        &self,
-        account_id: &str,
-        label_id: &str,
-        req: &UpdateLabel,
-    ) -> Result<LabelModel> {
-        let label = self.get_label(account_id, label_id).await?;
-        let mut label: LabelActiveModel = label.into();
-        label.name = Set(req.name.clone());
-        label.update(&self.conn).await?;
-        self.get_label(account_id, label_id).await
-    }
-    async fn get_label(&self, account_id: &str, label_id: &str) -> Result<LabelModel> {
-        let label = LabelEntity::find()
-            .filter(labels::Column::AccountId.eq(account_id))
-            .filter(labels::Column::Id.eq(label_id))
-            .one(&self.conn)
-            .await?
-            .ok_or_else(|| NeoiotError::ObjectNotFound("label".to_string()))?;
-        Ok(label)
-    }
-    async fn delete_label(&self, account_id: &str, label_id: &str) -> Result<()> {
-        let label = self.get_label(account_id, label_id).await?;
-        label.delete(&self.conn).await?;
-        Ok(())
     }
     async fn send_command_to_label(
         &self,
@@ -483,22 +483,6 @@ impl super::Repository for PostgresRepository {
         schema.delete(&self.conn).await?;
         Ok(())
     }
-    async fn get_field(
-        &self,
-        account_id: &str,
-        schema_id: &str,
-        identifier: &str,
-    ) -> Result<FieldModel> {
-        let field = FieldEntity::find()
-            .left_join(SchemaEntity)
-            .filter(schemas::Column::AccountId.eq(account_id))
-            .filter(fields::Column::SchemaId.eq(schema_id))
-            .filter(fields::Column::Identifier.eq(identifier))
-            .one(&self.conn)
-            .await?
-            .ok_or_else(|| NeoiotError::ObjectNotFound("field".to_string()))?;
-        Ok(field)
-    }
     async fn create_field(
         &self,
         account_id: &str,
@@ -516,6 +500,22 @@ impl super::Repository for PostgresRepository {
         let field = new_field.insert(&self.conn).await?;
         Ok(field)
     }
+    async fn get_field(
+        &self,
+        account_id: &str,
+        schema_id: &str,
+        identifier: &str,
+    ) -> Result<FieldModel> {
+        let field = FieldEntity::find()
+            .left_join(SchemaEntity)
+            .filter(schemas::Column::AccountId.eq(account_id))
+            .filter(fields::Column::SchemaId.eq(schema_id))
+            .filter(fields::Column::Identifier.eq(identifier))
+            .one(&self.conn)
+            .await?
+            .ok_or_else(|| NeoiotError::ObjectNotFound("field".to_string()))?;
+        Ok(field)
+    }
     async fn update_field(
         &self,
         account_id: &str,
@@ -531,11 +531,17 @@ impl super::Repository for PostgresRepository {
         if let Some(data_type) = &req.data_type {
             field.data_type = Set(data_type.clone());
         };
-        if let Some(comment) = &req.comment {
-            field.comment = Set(comment.clone());
+        if let MaybeUndefined::Value(comment) = &req.comment {
+            field.comment = Set(Some(comment.clone()));
         };
-        if let Some(unit) = &req.unit {
-            field.unit = Set(unit.clone());
+        if req.comment.is_null() {
+            field.comment = Set(None);
+        };
+        if let MaybeUndefined::Value(unit) = &req.unit {
+            field.unit = Set(Some(unit.clone()));
+        };
+        if req.unit.is_null() {
+            field.unit = Set(None);
         };
         let field = field.update(&self.conn).await?;
         Ok(field)
